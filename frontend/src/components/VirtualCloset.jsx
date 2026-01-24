@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, User } from 'lucide-react';
+import { Home, User, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const VirtualCloset = () => {
@@ -59,9 +59,18 @@ const VirtualCloset = () => {
           
           <h1 className="text-xl font-semibold text-gray-800">Virtual Closet</h1>
           
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition">
-            <User className="w-5 h-5 text-gray-600" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => navigate('/outfit')}
+              className="p-2 hover:bg-blue-50 rounded-lg transition group"
+              title="Get Outfit Recommendations"
+            >
+              <Sparkles className="w-5 h-5 text-blue-500 group-hover:text-blue-600" />
+            </button>
+            <button className="p-2 hover:bg-gray-100 rounded-lg transition">
+              <User className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
         </div>
       </header>
 
