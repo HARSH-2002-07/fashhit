@@ -1,14 +1,37 @@
-import React, { useState } from 'react';
-import { Home, User, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, User, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { uploadToCloudinary } from '../lib/cloudinary';
 
 const VirtualCloset = () => {
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState('Tops');
   const [uploadedItems, setUploadedItems] = useState([]);
   const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState([]);
 
   const tabs = ['Tops', 'Bottoms', 'Shoes'];
+
+  // Load items from localStorage on component mount (temporary without Supabase)
+  useEffect(() => {
+    loadItems();
+  }, [selectedTab]);
+
+  const loadItems = () => {
+    try {
+      const storedItems = localStorage.getItem('wardrobe_items');
+      if (storedItems) {
+        const allItems = JSON.parse(storedItems);
+        const filteredItems = allItems.filter(
+          item => item.category === selectedTab.toLowerCase()
+        );
+        setUploadedItems(filteredItems);
+      }
+    } catch (error) {
+      console.error('Error loading items:', error);
+    }
+  };
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -36,13 +59,82 @@ const VirtualCloset = () => {
     }
   };
 
-  const handleFiles = (files) => {
-    const fileArray = Array.from(files).map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-      id: Math.random().toString(36).substr(2, 9)
-    }));
-    setUploadedItems(prev => [...prev, ...fileArray]);
+  const handleFiles = async (files) => {
+    setUploading(true);
+    const fileArray = Array.from(files);
+    
+    try {
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        
+        // Update progress
+        setUploadProgress(prev => [...prev, { name: file.name, status: 'uploading' }]);
+        
+        // Upload to Cloudinary
+        const cloudinaryResult = await uploadToCloudinary(file);
+        console.log('✅ Uploaded to Cloudinary:', cloudinaryResult.url);
+        
+        // Create item object
+        const newItem = {
+          id: Date.now() + i, // Temporary ID
+          image_url: cloudinaryResult.url,
+          cloudinary_public_id: cloudinaryResult.publicId,
+          category: selectedTab.toLowerCase(),
+          width: cloudinaryResult.width,
+          height: cloudinaryResult.height,
+          format: cloudinaryResult.format,
+          file_name: file.name,
+          created_at: new Date().toISOString()
+        };
+
+        // Save to localStorage (temporary without Supabase)
+        const storedItems = localStorage.getItem('wardrobe_items');
+        const allItems = storedItems ? JSON.parse(storedItems) : [];
+        allItems.unshift(newItem);
+        localStorage.setItem('wardrobe_items', JSON.stringify(allItems));
+
+        // Update progress
+        setUploadProgress(prev => 
+          prev.map(p => 
+            p.name === file.name ? { ...p, status: 'completed' } : p
+          )
+        );
+        
+        // Add to local state
+        setUploadedItems(prev => [newItem, ...prev]);
+      }
+      
+      alert('Images uploaded successfully to Cloudinary! ✅');
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      alert('Failed to upload images. Please check your Cloudinary configuration in .env file.');
+    } finally {
+      setUploading(false);
+      setUploadProgress([]);
+    }
+  };
+
+  const handleDeleteItem = (itemId, publicId) => {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+
+    try {
+      // Remove from localStorage
+      const storedItems = localStorage.getItem('wardrobe_items');
+      if (storedItems) {
+        const allItems = JSON.parse(storedItems);
+        const filteredItems = allItems.filter(item => item.id !== itemId);
+        localStorage.setItem('wardrobe_items', JSON.stringify(filteredItems));
+      }
+
+      // Remove from local state
+      setUploadedItems(prev => prev.filter(item => item.id !== itemId));
+      
+      console.log('Item deleted. Cloudinary public ID:', publicId);
+      alert('Item deleted successfully! ✅');
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      alert('Failed to delete item');
+    }
   };
 
   return (
@@ -78,41 +170,58 @@ const VirtualCloset = () => {
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Upload Area */}
         <div
-          className={`border-2 border-dashed rounded-xl p-12 text-center mb-8 transition ${
+          className={`border-2 border-dashed rounded-xl p-12 text-center mb-8 transition relative ${
             dragActive 
               ? 'border-blue-500 bg-blue-50' 
               : 'border-gray-300 bg-white'
-          }`}
+          } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
         >
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 mb-4 flex items-center justify-center">
-              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+          {uploading ? (
+            <div className="flex flex-col items-center">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+              <h3 className="text-lg font-medium text-gray-700 mb-2">
+                Uploading to Cloudinary...
+              </h3>
+              <div className="space-y-1">
+                {uploadProgress.map((progress, index) => (
+                  <p key={index} className="text-sm text-gray-600">
+                    {progress.name} - {progress.status}
+                  </p>
+                ))}
+              </div>
             </div>
-            <h3 className="text-lg font-medium text-gray-700 mb-2">
-              Drag & Drop Photos Here
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">or Click to Upload</p>
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleFileInput}
-              className="hidden"
-              id="file-upload"
-            />
-            <label
-              htmlFor="file-upload"
-              className="cursor-pointer text-blue-500 hover:text-blue-600 text-sm font-medium"
-            >
-              Browse Files
-            </label>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 mb-4 flex items-center justify-center">
+                <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-700 mb-2">
+                Drag & Drop Photos Here
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">or Click to Upload</p>
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleFileInput}
+                className="hidden"
+                id="file-upload"
+                disabled={uploading}
+              />
+              <label
+                htmlFor="file-upload"
+                className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-full text-sm font-medium transition"
+              >
+                Browse Files
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -135,61 +244,27 @@ const VirtualCloset = () => {
         {/* Items Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {uploadedItems.length === 0 ? (
-            <>
-              {/* Default placeholder items */}
-              <div className="aspect-square bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-center">
-                <div className="text-center">
-                  <svg className="w-16 h-16 mx-auto text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20.822 18.096c-3.439-.794-6.64-1.49-5.09-4.418 4.72-8.912 1.251-13.678-3.732-13.678-5.082 0-8.464 4.949-3.732 13.678 1.597 2.945-1.725 3.641-5.09 4.418-3.073.71-3.188 2.236-3.178 4.904l.004 1h23.99l.004-.969c.012-2.688-.092-4.222-3.176-4.935z"/>
-                  </svg>
-                  <p className="text-xs text-gray-500 mt-2">Blue T-Shirt</p>
-                </div>
-              </div>
-              
-              <div className="aspect-square bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-center">
-                <div className="text-center">
-                  <svg className="w-16 h-16 mx-auto text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20.822 18.096c-3.439-.794-6.64-1.49-5.09-4.418 4.72-8.912 1.251-13.678-3.732-13.678-5.082 0-8.464 4.949-3.732 13.678 1.597 2.945-1.725 3.641-5.09 4.418-3.073.71-3.188 2.236-3.178 4.904l.004 1h23.99l.004-.969c.012-2.688-.092-4.222-3.176-4.935z"/>
-                  </svg>
-                  <p className="text-xs text-gray-500 mt-2">Gray Jeans</p>
-                </div>
-              </div>
-
-              <div className="aspect-square bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-center">
-                <div className="text-center">
-                  <svg className="w-16 h-16 mx-auto text-indigo-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20.822 18.096c-3.439-.794-6.64-1.49-5.09-4.418 4.72-8.912 1.251-13.678-3.732-13.678-5.082 0-8.464 4.949-3.732 13.678 1.597 2.945-1.725 3.641-5.09 4.418-3.073.71-3.188 2.236-3.178 4.904l.004 1h23.99l.004-.969c.012-2.688-.092-4.222-3.176-4.935z"/>
-                  </svg>
-                  <p className="text-xs text-gray-500 mt-2">Blue Jeans</p>
-                </div>
-              </div>
-
-              <div className="aspect-square bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-center">
-                <div className="text-center">
-                  <svg className="w-16 h-16 mx-auto text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M22 7h-7V1H9v6H2l10 9 10-9zM3.5 17l-.5 4h18l-.5-4H3.5z"/>
-                  </svg>
-                  <p className="text-xs text-gray-500 mt-2">White Shoes</p>
-                </div>
-              </div>
-
-              <div className="aspect-square bg-gray-200 rounded-lg border border-gray-300 flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <div className="w-12 h-12 mx-auto mb-2 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
-                  </div>
-                  <p className="text-xs">Processing...</p>
-                </div>
-              </div>
-            </>
+            <div className="col-span-full text-center py-12">
+              <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              </svg>
+              <p className="text-gray-500">No items in your {selectedTab.toLowerCase()} yet.</p>
+              <p className="text-gray-400 text-sm mt-2">Upload some photos to get started!</p>
+            </div>
           ) : (
             uploadedItems.map((item) => (
-              <div key={item.id} className="aspect-square bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div key={item.id} className="aspect-square bg-white rounded-lg border border-gray-200 overflow-hidden relative group">
                 <img
-                  src={item.preview}
-                  alt="Uploaded item"
+                  src={item.image_url}
+                  alt={item.file_name || "Wardrobe item"}
                   className="w-full h-full object-cover"
                 />
+                <button
+                  onClick={() => handleDeleteItem(item.id, item.cloudinary_public_id)}
+                  className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             ))
           )}
