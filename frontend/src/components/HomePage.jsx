@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Upload, Calendar, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import AuthModal from './AuthModal';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -25,7 +27,10 @@ const HomePage = () => {
           </a>
         </div>
 
-        <button className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition">
+        <button 
+          onClick={() => setIsAuthModalOpen(true)}
+          className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition"
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
@@ -195,6 +200,12 @@ const HomePage = () => {
             <div className="text-sm text-gray-600">
               © 2026 AiStylist Inc.
             </div>
+
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
           </div>
         </div>
       </footer>
