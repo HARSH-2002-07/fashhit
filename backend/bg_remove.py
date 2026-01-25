@@ -46,10 +46,10 @@ def get_largest_contour_mask(pil_img):
     
     return Image.fromarray(img)
 
-def clean_image_robust(image_path):
+def clean_image_robust(pil_image):
+    """Clean image by removing background - accepts PIL Image object"""
     try:
-        input_img = Image.open(image_path)
-        input_img = ImageOps.exif_transpose(input_img) # Fix rotation bugs
+        input_img = ImageOps.exif_transpose(pil_image) # Fix rotation bugs
         
         # FIX 2: Disable Alpha Matting
         # Alpha matting causes the "Ghosting" on white shirts. 

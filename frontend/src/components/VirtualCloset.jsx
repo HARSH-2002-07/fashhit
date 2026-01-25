@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Home, User, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { uploadToCloudinary } from '../lib/cloudinary';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const VirtualCloset = () => {
   const navigate = useNavigate();
@@ -13,23 +14,22 @@ const VirtualCloset = () => {
 
   const tabs = ['Tops', 'Bottoms', 'Shoes'];
 
-  // Load items from localStorage on component mount (temporary without Supabase)
+  // Load items from backend API
   useEffect(() => {
     loadItems();
   }, [selectedTab]);
 
-  const loadItems = () => {
+  const loadItems = async () => {
     try {
-      const storedItems = localStorage.getItem('wardrobe_items');
-      if (storedItems) {
-        const allItems = JSON.parse(storedItems);
-        const filteredItems = allItems.filter(
-          item => item.category === selectedTab.toLowerCase()
-        );
-        setUploadedItems(filteredItems);
+      const response = await fetch(`${API_URL}/wardrobe/${selectedTab.toLowerCase()}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setUploadedItems(result.data || []);
       }
     } catch (error) {
       console.error('Error loading items:', error);
+      setUploadedItems([]);
     }
   };
 
@@ -68,69 +68,83 @@ const VirtualCloset = () => {
         const file = fileArray[i];
         
         // Update progress
-        setUploadProgress(prev => [...prev, { name: file.name, status: 'uploading' }]);
+        setUploadProgress(prev => [...prev, { 
+          name: file.name, 
+          status: 'uploading',
+          step: 'Uploading to server...'
+        }]);
         
-        // Upload to Cloudinary
-        const cloudinaryResult = await uploadToCloudinary(file);
-        console.log('✅ Uploaded to Cloudinary:', cloudinaryResult.url);
+        // Create FormData
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('category', selectedTab.toLowerCase());
         
-        // Create item object
-        const newItem = {
-          id: Date.now() + i, // Temporary ID
-          image_url: cloudinaryResult.url,
-          cloudinary_public_id: cloudinaryResult.publicId,
-          category: selectedTab.toLowerCase(),
-          width: cloudinaryResult.width,
-          height: cloudinaryResult.height,
-          format: cloudinaryResult.format,
-          file_name: file.name,
-          created_at: new Date().toISOString()
-        };
-
-        // Save to localStorage (temporary without Supabase)
-        const storedItems = localStorage.getItem('wardrobe_items');
-        const allItems = storedItems ? JSON.parse(storedItems) : [];
-        allItems.unshift(newItem);
-        localStorage.setItem('wardrobe_items', JSON.stringify(allItems));
-
+        // Send to backend API
+        const response = await fetch(`${API_URL}/process-clothing`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
+        
+        console.log('✅ Processed successfully:', result.data);
+        
         // Update progress
         setUploadProgress(prev => 
           prev.map(p => 
-            p.name === file.name ? { ...p, status: 'completed' } : p
+            p.name === file.name ? { ...p, status: 'completed', step: 'Complete!' } : p
           )
         );
         
         // Add to local state
+        const newItem = {
+          id: result.data.id,
+          clean_image_url: result.data.clean_url,
+          raw_image_url: result.data.raw_url,
+          category: selectedTab.toLowerCase(),
+          file_name: file.name,
+          attributes: result.data.attributes,
+          style_tags: result.data.style_tags
+        };
+        
         setUploadedItems(prev => [newItem, ...prev]);
       }
       
-      alert('Images uploaded successfully to Cloudinary! ✅');
+      alert('Images processed successfully! Background removed and attributes extracted. ✅');
     } catch (error) {
       console.error('Error uploading files:', error);
-      alert('Failed to upload images. Please check your Cloudinary configuration in .env file.');
+      alert(`Failed to process images: ${error.message}. Make sure the backend server is running.`);
     } finally {
       setUploading(false);
       setUploadProgress([]);
     }
   };
 
-  const handleDeleteItem = (itemId, publicId) => {
+  const handleDeleteItem = async (itemId) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      // Remove from localStorage
-      const storedItems = localStorage.getItem('wardrobe_items');
-      if (storedItems) {
-        const allItems = JSON.parse(storedItems);
-        const filteredItems = allItems.filter(item => item.id !== itemId);
-        localStorage.setItem('wardrobe_items', JSON.stringify(filteredItems));
-      }
-
-      // Remove from local state
-      setUploadedItems(prev => prev.filter(item => item.id !== itemId));
+      const response = await fetch(`${API_URL}/wardrobe/${itemId}`, {
+        method: 'DELETE',
+      });
       
-      console.log('Item deleted. Cloudinary public ID:', publicId);
-      alert('Item deleted successfully! ✅');
+      const result = await response.json();
+      
+      if (result.success) {
+        // Remove from local state
+        setUploadedItems(prev => prev.filter(item => item.id !== itemId));
+        alert('Item deleted successfully! ✅');
+      } else {
+        throw new Error(result.error);
+      }
     } catch (error) {
       console.error('Error deleting item:', error);
       alert('Failed to delete item');
@@ -184,15 +198,18 @@ const VirtualCloset = () => {
             <div className="flex flex-col items-center">
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
               <h3 className="text-lg font-medium text-gray-700 mb-2">
-                Uploading to Cloudinary...
+                Processing Image...
               </h3>
               <div className="space-y-1">
                 {uploadProgress.map((progress, index) => (
                   <p key={index} className="text-sm text-gray-600">
-                    {progress.name} - {progress.status}
+                    {progress.name} - {progress.step || progress.status}
                   </p>
                 ))}
               </div>
+              <p className="text-xs text-gray-500 mt-4">
+                Removing background & extracting attributes...
+              </p>
             </div>
           ) : (
             <div className="flex flex-col items-center">
@@ -255,12 +272,12 @@ const VirtualCloset = () => {
             uploadedItems.map((item) => (
               <div key={item.id} className="aspect-square bg-white rounded-lg border border-gray-200 overflow-hidden relative group">
                 <img
-                  src={item.image_url}
+                  src={item.clean_image_url || item.image_url}
                   alt={item.file_name || "Wardrobe item"}
                   className="w-full h-full object-cover"
                 />
                 <button
-                  onClick={() => handleDeleteItem(item.id, item.cloudinary_public_id)}
+                  onClick={() => handleDeleteItem(item.id)}
                   className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition"
                 >
                   <Trash2 className="w-4 h-4" />

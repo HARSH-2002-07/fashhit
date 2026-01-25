@@ -3,11 +3,21 @@ import json
 import time
 from PIL import Image
 import google.generativeai as genai
-from fashion_clip.fashion_clip import FashionCLIP
 from tqdm import tqdm
 
+# Try to import FashionCLIP, but make it optional
+try:
+    from fashion_clip.fashion_clip import FashionCLIP
+    FASHION_CLIP_AVAILABLE = True
+except ImportError:
+    print("⚠️ FashionCLIP not available - style tags will be skipped")
+    FASHION_CLIP_AVAILABLE = False
+
 # --- CONFIGURATION ---
-GEMINI_API_KEY = "AIzaSyC3vlP29I-jC8XkRftmrV9n3PtLqdCMlDk" # ⚠️ Replace with your actual key
+from dotenv import load_dotenv
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY') or "YOUR_KEY_HERE"
 
 # Folder Paths
 # This should point to where your clean PNGs are currently located
@@ -19,15 +29,39 @@ JSON_OUTPUT_DIR = "my_wardrobe/data/json"
 print("🔧 Initializing System...")
 
 # 1. Setup Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_KEY_HERE" and GEMINI_API_KEY != "YOUR_NEW_GEMINI_API_KEY_HERE":
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+else:
+    print("⚠️ Warning: No valid Gemini API key found. Please set GEMINI_API_KEY in .env file")
+    print("   Get a new API key from: https://makersuite.google.com/app/apikey")
+    model = None
 
-# 2. Setup FashionCLIP
-print("👗 Loading FashionCLIP model...")
-fclip = FashionCLIP('fashion-clip')
+# 2. Setup FashionCLIP (optional)
+if FASHION_CLIP_AVAILABLE:
+    print("👗 Loading FashionCLIP model...")
+    fclip = FashionCLIP('fashion-clip')
+else:
+    fclip = None
 
 def extract_tags_gemini(pil_image):
     """Stage 2: Attribute Extraction"""
+    
+    # Check if Gemini is configured
+    if model is None:
+        print("⚠️ Gemini not configured - returning placeholder attributes")
+        return {
+            "category": "Unknown",
+            "sub_category": "Unknown",
+            "primary_color": "Unknown",
+            "secondary_colors": [],
+            "pattern": "Unknown",
+            "material_appearance": "Unknown",
+            "seasonality": "All-Season",
+            "formality": "Casual",
+            "error": "Gemini API key not configured"
+        }
+    
     prompt = """
     Analyze this clothing item. Return a strict JSON object with these keys:
     - category: (Top, Bottom, Footwear, Outerwear, One-Piece, Accessory)
@@ -56,6 +90,10 @@ def extract_tags_gemini(pil_image):
 
 def get_fashion_vector(image_path):
     """Stage 3: Vector Embedding"""
+    if not FASHION_CLIP_AVAILABLE or fclip is None:
+        print("⚠️ FashionCLIP not available, skipping vector embedding")
+        return []
+    
     try:
         # FashionCLIP reads from file path
         embeddings = fclip.encode_images([image_path], batch_size=1)

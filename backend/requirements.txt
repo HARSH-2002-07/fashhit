@@ -1,0 +1,10 @@
+# Backend API Dependencies
+flask==3.0.0
+flask-cors==4.0.0
+rembg>=2.0.70
+pillow>=10.2.0
+opencv-python>=4.9.0.80
+google-generativeai>=0.3.2
+python-dotenv>=1.0.0
+requests>=2.31.0
+supabase>=2.3.0
