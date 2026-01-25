@@ -1,11 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Calendar, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  
+  // Open auth modal if redirected from protected route
+  useEffect(() => {
+    if (location.state?.openAuth) {
+      setIsAuthModalOpen(true);
+    }
+  }, [location]);
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigate('/closet');
+    } else {
+      setIsAuthModalOpen(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -27,15 +46,27 @@ const HomePage = () => {
           </a>
         </div>
 
-        <button 
-          onClick={() => setIsAuthModalOpen(true)}
-          className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <span>Sign In</span>
-        </button>
+        {user ? (
+          <button 
+            onClick={() => navigate('/closet')}
+            className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span>Go to Closet</span>
+          </button>
+        ) : (
+          <button 
+            onClick={() => setIsAuthModalOpen(true)}
+            className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span>Sign In</span>
+          </button>
+        )}
       </nav>
 
       {/* Hero Section */}
@@ -49,7 +80,7 @@ const HomePage = () => {
               Upload your wardrobe, get perfect outfit suggestions instantly.
             </p>
             <button 
-              onClick={() => navigate('/closet')}
+              onClick={handleGetStarted}
               className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-full text-lg font-medium transition shadow-lg hover:shadow-xl"
             >
               Get Started - Build Your Closet

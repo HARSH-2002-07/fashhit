@@ -1,18 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Home, User, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { Home, User, Sparkles, Loader2, Trash2, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const VirtualCloset = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [selectedTab, setSelectedTab] = useState('Tops');
   const [uploadedItems, setUploadedItems] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState([]);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const tabs = ['Tops', 'Bottoms', 'Shoes'];
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!user) {
+      navigate('/', { state: { openAuth: true } });
+    }
+  }, [user, navigate]);
 
   // Load items from backend API
   useEffect(() => {
@@ -173,9 +183,43 @@ const VirtualCloset = () => {
             >
               <Sparkles className="w-5 h-5 text-blue-500 group-hover:text-blue-600" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition">
-              <User className="w-5 h-5 text-gray-600" />
-            </button>
+            
+            {/* User Menu */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition"
+              >
+                <User className="w-5 h-5 text-gray-600" />
+                {user && (
+                  <span className="text-sm text-gray-600 hidden sm:inline">
+                    {user.email?.split('@')[0]}
+                  </span>
+                )}
+              </button>
+              
+              {/* Dropdown Menu */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-700">
+                      {user?.user_metadata?.full_name || 'User'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await signOut();
+                      navigate('/');
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
