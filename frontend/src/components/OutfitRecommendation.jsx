@@ -13,6 +13,7 @@ const OutfitRecommendation = () => {
   const [error, setError] = useState(null);
   const [currentOutfit, setCurrentOutfit] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [scenario, setScenario] = useState('');
 
   const handleRecommend = async () => {
     setLoading(true);
@@ -25,7 +26,7 @@ const OutfitRecommendation = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: 'casual everyday outfit',
+          query: scenario || 'casual everyday outfit',
           user_id: user?.id
         })
       });
@@ -57,7 +58,7 @@ const OutfitRecommendation = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: 'casual everyday outfit',
+          query: scenario || 'casual everyday outfit',
           user_id: user?.id
         })
       });
@@ -149,14 +150,37 @@ const OutfitRecommendation = () => {
               <h2 className="text-4xl font-bold text-gray-900 mb-4">
                 Ready for Your Perfect Look?
               </h2>
-              <p className="text-lg text-gray-600 max-w-md mx-auto">
-                Our AI will analyze your wardrobe and create the perfect outfit combination based on style, weather, and trends.
+              <p className="text-lg text-gray-600 max-w-md mx-auto mb-8">
+                Our AI will analyze your wardrobe and create the perfect outfit combination based on your occasion.
               </p>
+
+              {/* Scenario Input */}
+              <div className="max-w-xl mx-auto mb-8">
+                <label htmlFor="scenario" className="block text-left text-sm font-semibold text-gray-700 mb-3">
+                  What's the occasion? ✨
+                </label>
+                <div className="relative">
+                  <input
+                    id="scenario"
+                    type="text"
+                    value={scenario}
+                    onChange={(e) => setScenario(e.target.value)}
+                    placeholder="e.g., Formal office meeting, Casual coffee date, Party at night club..."
+                    className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition outline-none shadow-sm"
+                  />
+                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500 mt-2 text-left">
+                  Describe where you're going or the vibe you want
+                </p>
+              </div>
             </div>
 
             <button
               onClick={handleRecommend}
-              disabled={loading}
+              disabled={loading || !scenario.trim()}
               className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white px-12 py-4 rounded-full text-lg font-semibold transition shadow-xl hover:shadow-2xl transform hover:scale-105 flex items-center space-x-3"
             >
               {loading ? (
@@ -172,6 +196,12 @@ const OutfitRecommendation = () => {
               )}
             </button>
 
+            {!scenario.trim() && !loading && (
+              <p className="text-sm text-gray-500 mt-4">
+                Please enter an occasion to get started
+              </p>
+            )}
+
             {error && (
               <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm max-w-md">
                 <p className="font-medium">⚠️ {error}</p>
@@ -185,20 +215,21 @@ const OutfitRecommendation = () => {
                 )}
               </div>
             )}
-
-            <p className="text-sm text-gray-500 mt-6">
-              Make sure you have items in your closet first
-            </p>
           </div>
         ) : (
           /* Show Outfit Recommendation */
           <>
             <div className="text-center mb-12">
+              <div className="inline-block px-6 py-2 bg-gradient-to-r from-blue-100 to-purple-100 rounded-full mb-4">
+                <p className="text-sm font-semibold text-gray-700">
+                  🎯 Occasion: <span className="text-blue-600">{scenario}</span>
+                </p>
+              </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-3">
                 Your AI-Recommended Outfit
               </h2>
               <p className="text-gray-600">
-                Based on your closet and current trends
+                Perfectly curated for your occasion
               </p>
             </div>
 
