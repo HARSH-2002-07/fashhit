@@ -196,6 +196,93 @@ def delete_wardrobe_item(item_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/recommend-outfit', methods=['POST'])
+def recommend_outfit():
+    """
+    Generate outfit recommendation using AI planner
+    Expects: { "query": "casual office meeting", "user_id": "uuid" }
+    Returns: { "outfit": { "top": {...}, "bottom": {...}, "shoes": {...} } }
+    """
+    try:
+        data = request.json
+        user_query = data.get('query', 'casual everyday outfit')
+        user_id = data.get('user_id')  # Optional: filter by user
+        
+        print(f"🎨 Generating outfit recommendation for: '{user_query}'")
+        
+        # Fetch user's wardrobe items from Supabase
+        query_builder = supabase.table('wardrobe_items').select('*')
+        if user_id:
+            query_builder = query_builder.eq('user_id', user_id)
+        
+        wardrobe_result = query_builder.execute()
+        wardrobe_items = wardrobe_result.data
+        
+        if not wardrobe_items or len(wardrobe_items) == 0:
+            return jsonify({
+                'success': False,
+                'error': 'No items found in wardrobe. Please upload some clothes first.'
+            }), 400
+        
+        print(f"📦 Found {len(wardrobe_items)} items in wardrobe")
+        
+        # Try to use FashionCLIP for semantic search, fallback to random selection
+        try:
+            from fashion_clip.fashion_clip import FashionCLIP
+            from ontology import Category
+            
+            fclip = FashionCLIP('fashion-clip')
+            query_vector = fclip.encode_text([user_query], batch_size=1)[0]
+            
+            # Simple outfit selection logic
+            outfit = {}
+            
+            # Find best matching items for each category
+            for category_name in ['tops', 'bottoms', 'shoes']:
+                category_items = [item for item in wardrobe_items if item['category'] == category_name]
+                
+                if category_items:
+                    # For now, just pick the first item
+                    # TODO: Implement proper vector similarity search
+                    outfit[category_name] = category_items[0]
+                else:
+                    outfit[category_name] = None
+            
+            print(f"✅ Outfit generated successfully")
+            
+            return jsonify({
+                'success': True,
+                'outfit': outfit,
+                'query': user_query
+            }), 200
+            
+        except ImportError:
+            print("⚠️ FashionCLIP not available, using simple selection")
+            
+            # Fallback: Simple random selection
+            outfit = {}
+            for category_name in ['tops', 'bottoms', 'shoes']:
+                category_items = [item for item in wardrobe_items if item['category'] == category_name]
+                if category_items:
+                    import random
+                    outfit[category_name] = random.choice(category_items)
+                else:
+                    outfit[category_name] = None
+            
+            return jsonify({
+                'success': True,
+                'outfit': outfit,
+                'query': user_query,
+                'note': 'Using simple selection (FashionCLIP not available)'
+            }), 200
+            
+    except Exception as e:
+        print(f"❌ Error generating outfit: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     print("🚀 Starting Fashion AI Backend Server...")
     print(f"📍 Server will run on http://localhost:5000")
