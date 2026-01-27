@@ -50,9 +50,11 @@ const OutfitRecommendation = () => {
     }
   };
 
-  const handleGenerateAnother = async () => {
+  const handleGenerateAnother = async (customScenario = null) => {
     setLoading(true);
     setError(null);
+    
+    const scenarioToUse = customScenario !== null ? customScenario : scenario;
     
     try {
       const response = await fetch(`${API_URL}/recommend-outfit`, {
@@ -61,7 +63,7 @@ const OutfitRecommendation = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: scenario || 'casual everyday outfit',
+          query: scenarioToUse || 'casual everyday outfit',
           user_id: user?.id
         })
       });
@@ -121,7 +123,7 @@ const OutfitRecommendation = () => {
   const handleConfirmScenario = () => {
     setScenario(tempScenario);
     setShowScenarioEdit(false);
-    handleGenerateAnother();
+    handleGenerateAnother(tempScenario);
   };
 
   return (
