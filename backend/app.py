@@ -196,6 +196,51 @@ def delete_wardrobe_item(item_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/save-outfit', methods=['POST'])
+def save_outfit():
+    """Save a complete outfit with occasion to database"""
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        outfit = data.get('outfit', {})
+        occasion = data.get('occasion', 'Casual')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User ID required'
+            }), 400
+        
+        # Prepare outfit data
+        outfit_data = {
+            'user_id': user_id,
+            'occasion': occasion,
+            'top_id': outfit.get('tops', {}).get('id') if outfit.get('tops') else None,
+            'bottom_id': outfit.get('bottoms', {}).get('id') if outfit.get('bottoms') else None,
+            'shoes_id': outfit.get('shoes', {}).get('id') if outfit.get('shoes') else None,
+            'created_at': data.get('created_at')
+        }
+        
+        # Save to saved_outfits table
+        result = supabase.table('saved_outfits').insert(outfit_data).execute()
+        
+        print(f"✅ Outfit saved for user {user_id}: {occasion}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Outfit saved successfully',
+            'data': result.data
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error saving outfit: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/recommend-outfit', methods=['POST'])
 def recommend_outfit():
     """

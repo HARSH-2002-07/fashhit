@@ -14,6 +14,9 @@ const OutfitRecommendation = () => {
   const [currentOutfit, setCurrentOutfit] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [scenario, setScenario] = useState('');
+  const [showScenarioEdit, setShowScenarioEdit] = useState(false);
+  const [tempScenario, setTempScenario] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const handleRecommend = async () => {
     setLoading(true);
@@ -78,9 +81,47 @@ const OutfitRecommendation = () => {
     }
   };
 
-  const handleSaveOutfit = () => {
-    // Logic to save outfit to database
-    alert('Outfit saved to your collection! ✅');
+  const handleSaveOutfit = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/save-outfit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user?.id,
+          outfit: currentOutfit,
+          occasion: scenario,
+          created_at: new Date().toISOString()
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to save outfit');
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTryAnotherLook = () => {
+    setTempScenario(scenario);
+    setShowScenarioEdit(true);
+  };
+
+  const handleConfirmScenario = () => {
+    setScenario(tempScenario);
+    setShowScenarioEdit(false);
+    handleGenerateAnother();
   };
 
   return (
@@ -316,7 +357,7 @@ const OutfitRecommendation = () => {
               </button>
               
               <button
-                onClick={handleGenerateAnother}
+                onClick={handleTryAnotherLook}
                 disabled={loading}
                 className="bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-700 px-8 py-3 rounded-full font-medium transition border-2 border-gray-300 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center space-x-2"
               >
@@ -327,6 +368,57 @@ const OutfitRecommendation = () => {
           </>
         )}
       </main>
+
+      {/* Scenario Edit Modal */}
+      {showScenarioEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">Change Occasion?</h3>
+            <p className="text-gray-600 mb-6">Update the occasion or keep the current one</p>
+            
+            <div className="mb-6">
+              <label htmlFor="edit-scenario" className="block text-sm font-semibold text-gray-700 mb-2">
+                What's the occasion? ✨
+              </label>
+              <input
+                id="edit-scenario"
+                type="text"
+                value={tempScenario}
+                onChange={(e) => setTempScenario(e.target.value)}
+                placeholder="e.g., Formal office meeting, Casual coffee date..."
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition outline-none"
+              />
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowScenarioEdit(false)}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmScenario}
+                disabled={!tempScenario.trim()}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition"
+              >
+                Generate New Look
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Success Notification */}
+      {saveSuccess && (
+        <div className="fixed bottom-8 right-8 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center space-x-3 animate-slide-up z-50">
+          <Heart className="w-6 h-6 fill-current" />
+          <div>
+            <p className="font-semibold">Outfit Saved!</p>
+            <p className="text-sm text-green-100">Added to your collection</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
