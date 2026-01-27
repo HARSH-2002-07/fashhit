@@ -199,9 +199,9 @@ def delete_wardrobe_item(item_id):
 @app.route('/api/recommend-outfit', methods=['POST'])
 def recommend_outfit():
     """
-    Generate outfit recommendation using AI planner
+    Generate outfit recommendation using AI planner with neuro-symbolic reasoning
     Expects: { "query": "casual office meeting", "user_id": "uuid" }
-    Returns: { "outfit": { "top": {...}, "bottom": {...}, "shoes": {...} } }
+    Returns: { "outfit": { "Top": {...}, "Bottom": {...}, "Footwear": {...} } }
     """
     try:
         data = request.json
@@ -226,58 +226,216 @@ def recommend_outfit():
         
         print(f"📦 Found {len(wardrobe_items)} items in wardrobe")
         
-        # Try to use FashionCLIP for semantic search, fallback to random selection
+        # Try to use the sophisticated ProPlanner with neuro-symbolic reasoning
         try:
-            from fashion_clip.fashion_clip import FashionCLIP
-            from ontology import Category
+            from planner import ProPlanner
+            from store import WardrobeStore
+            import tempfile
+            import shutil
             
-            fclip = FashionCLIP('fashion-clip')
-            query_vector = fclip.encode_text([user_query], batch_size=1)[0]
+            print("🧠 Initializing neuro-symbolic planner...")
             
-            # Simple outfit selection logic
-            outfit = {}
+            # Create a temporary data directory structure for the planner
+            temp_dir = tempfile.mkdtemp()
+            json_dir = os.path.join(temp_dir, "json")
+            os.makedirs(json_dir, exist_ok=True)
             
-            # Find best matching items for each category
-            for category_name in ['tops', 'bottoms', 'shoes']:
-                category_items = [item for item in wardrobe_items if item['category'] == category_name]
+            # Convert Supabase data to the format expected by WardrobeStore
+            # Map database categories to ontology categories
+            category_map = {
+                'tops': 'Top',
+                'bottoms': 'Bottom',
+                'shoes': 'Footwear'
+            }
+            
+            has_embeddings = False
+            for item in wardrobe_items:
+                # Transform database format to planner format
+                planner_item = {
+                    'id': item['id'],
+                    'meta': {
+                        'category': category_map.get(item['category'], item['category']),
+                        'sub_category': item.get('attributes', {}).get('sub_category', 'Unknown'),
+                        'primary_color': item.get('attributes', {}).get('primary_color', 'black'),
+                        'primary_color_hex': item.get('attributes', {}).get('primary_color_hex', '#000000'),
+                        'formality': item.get('attributes', {}).get('formality', 'Casual'),
+                        'pattern': item.get('attributes', {}).get('pattern', 'Solid'),
+                        'season': item.get('attributes', {}).get('seasonality', 'All-Season'),
+                    },
+                    'raw_image_url': item['raw_image_url'],
+                    'clean_image_url': item['clean_image_url'],
+                }
                 
-                if category_items:
-                    # For now, just pick the first item
-                    # TODO: Implement proper vector similarity search
-                    outfit[category_name] = category_items[0]
+                # Check if we have embeddings (vector data)
+                # Embeddings should be stored in a separate column or we need to generate them
+                # For now, check if the item has valid vector data
+                if 'embedding' in item and item['embedding'] and len(item['embedding']) > 0:
+                    planner_item['embedding'] = item['embedding']
+                    has_embeddings = True
                 else:
-                    outfit[category_name] = None
+                    # No embedding available - planner won't be able to do vector search
+                    planner_item['embedding'] = []
+                
+                # Save to temporary JSON file
+                json_path = os.path.join(json_dir, f"{item['id']}.json")
+                with open(json_path, 'w') as f:
+                    json.dump(planner_item, f)
             
-            print(f"✅ Outfit generated successfully")
+            if not has_embeddings:
+                print("⚠️ No embeddings found in wardrobe items. ProPlanner requires embeddings.")
+                raise Exception("Embeddings not available - using fallback method")
+            
+            # Initialize store and planner
+            store = WardrobeStore(data_dir=temp_dir)
+            planner = ProPlanner(store=store)
+            
+            # Generate outfit using neuro-symbolic reasoning
+            outfit_plan = planner.plan(user_query=user_query, template_name="basic")
+            
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            if not outfit_plan:
+                raise Exception("Planner could not generate a valid outfit combination")
+            
+            # Convert outfit plan back to API format
+            # Map Category enum values back to database format for frontend
+            reverse_category_map = {
+                'Top': 'tops',
+                'Bottom': 'bottoms',
+                'Footwear': 'shoes'
+            }
+            
+            outfit_response = {}
+            for category, item in outfit_plan.items():
+                api_category = reverse_category_map.get(category, category.lower())
+                
+                # Find the original database item to include all fields
+                db_item = next((db_i for db_i in wardrobe_items if db_i['id'] == item['id']), None)
+                if db_item:
+                    outfit_response[api_category] = db_item
+                else:
+                    outfit_response[api_category] = None
+            
+            print(f"✅ Outfit generated successfully using neuro-symbolic reasoning")
             
             return jsonify({
                 'success': True,
-                'outfit': outfit,
-                'query': user_query
-            }), 200
-            
-        except ImportError:
-            print("⚠️ FashionCLIP not available, using simple selection")
-            
-            # Fallback: Simple random selection
-            outfit = {}
-            for category_name in ['tops', 'bottoms', 'shoes']:
-                category_items = [item for item in wardrobe_items if item['category'] == category_name]
-                if category_items:
-                    import random
-                    outfit[category_name] = random.choice(category_items)
-                else:
-                    outfit[category_name] = None
-            
-            return jsonify({
-                'success': True,
-                'outfit': outfit,
+                'outfit': outfit_response,
                 'query': user_query,
-                'note': 'Using simple selection (FashionCLIP not available)'
+                'method': 'neuro-symbolic'
             }), 200
+            
+        except Exception as planner_error:
+            print(f"⚠️ ProPlanner failed: {str(planner_error)}")
+            print("⚠️ Falling back to rule-based selection with color matching")
+            
+            # Enhanced Fallback: Use color matching without importing planner
+            # Define color matching function locally to avoid PyTorch import
+            def simple_color_score(color_a: str, color_b: str) -> float:
+                """Simple color matching without HSV calculations"""
+                neutral_colors = ['black', 'white', 'grey', 'gray', 'beige', 'brown', 'navy', 'khaki']
+                
+                # Both neutral = good match
+                if any(c in str(color_a).lower() for c in neutral_colors) and \
+                   any(c in str(color_b).lower() for c in neutral_colors):
+                    return 0.8
+                
+                # One neutral = safe match
+                if any(c in str(color_a).lower() for c in neutral_colors) or \
+                   any(c in str(color_b).lower() for c in neutral_colors):
+                    return 0.6
+                
+                # Same color = good match
+                if str(color_a).lower() == str(color_b).lower():
+                    return 0.7
+                
+                # Default
+                return 0.3
+            
+            try:
+                outfit = {}
+                selected_items = {}
+                
+                # Step 1: Select top (most formal or first available)
+                tops = [item for item in wardrobe_items if item['category'] == 'tops']
+                if tops:
+                    # Sort by formality: Formal > Smart Casual > Casual
+                    formality_order = {'Formal': 3, 'Smart Casual': 2, 'Smart-Casual': 2, 'Casual': 1, 'Lounge': 0}
+                    tops_sorted = sorted(tops, 
+                        key=lambda x: formality_order.get(x.get('attributes', {}).get('formality', 'Casual'), 1), 
+                        reverse=True)
+                    outfit['tops'] = tops_sorted[0]
+                    selected_items['top'] = tops_sorted[0]
+                else:
+                    outfit['tops'] = None
+                
+                # Step 2: Select bottom that matches the top
+                bottoms = [item for item in wardrobe_items if item['category'] == 'bottoms']
+                if bottoms and 'top' in selected_items:
+                    top = selected_items['top']
+                    # Score each bottom based on color harmony
+                    scored_bottoms = []
+                    for bottom in bottoms:
+                        top_color = top.get('attributes', {}).get('primary_color', 'black')
+                        bottom_color = bottom.get('attributes', {}).get('primary_color', 'black')
+                        color_score = simple_color_score(top_color, bottom_color)
+                        scored_bottoms.append((bottom, color_score))
+                    
+                    # Pick best color match
+                    scored_bottoms.sort(key=lambda x: x[1], reverse=True)
+                    outfit['bottoms'] = scored_bottoms[0][0] if scored_bottoms else bottoms[0]
+                    selected_items['bottom'] = outfit['bottoms']
+                elif bottoms:
+                    outfit['bottoms'] = bottoms[0]
+                else:
+                    outfit['bottoms'] = None
+                
+                # Step 3: Select shoes (prefer neutral colors)
+                shoes = [item for item in wardrobe_items if item['category'] == 'shoes']
+                if shoes:
+                    # Prefer neutral shoes (black, white, brown)
+                    neutral_colors = ['black', 'white', 'brown', 'grey', 'gray', 'beige']
+                    neutral_shoes = [s for s in shoes 
+                                   if s.get('attributes', {}).get('primary_color', '').lower() in neutral_colors]
+                    outfit['shoes'] = neutral_shoes[0] if neutral_shoes else shoes[0]
+                else:
+                    outfit['shoes'] = None
+                
+                print(f"✅ Outfit generated using rule-based color matching")
+                
+                return jsonify({
+                    'success': True,
+                    'outfit': outfit,
+                    'query': user_query,
+                    'method': 'rule-based-fallback'
+                }), 200
+                
+            except Exception as fallback_error:
+                print(f"⚠️ Rule-based fallback also failed: {str(fallback_error)}")
+                
+                # Simple random selection as last resort
+                import random
+                outfit = {}
+                for category_name in ['tops', 'bottoms', 'shoes']:
+                    category_items = [item for item in wardrobe_items if item['category'] == category_name]
+                    if category_items:
+                        outfit[category_name] = random.choice(category_items)
+                    else:
+                        outfit[category_name] = None
+                
+                return jsonify({
+                    'success': True,
+                    'outfit': outfit,
+                    'query': user_query,
+                    'method': 'random-fallback',
+                    'note': f'Using simple selection (All advanced methods failed)'
+                }), 200
             
     except Exception as e:
         print(f"❌ Error generating outfit: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
