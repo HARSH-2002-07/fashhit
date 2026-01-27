@@ -10,12 +10,13 @@ const VirtualCloset = () => {
   const { user, signOut } = useAuth();
   const [selectedTab, setSelectedTab] = useState('Tops');
   const [uploadedItems, setUploadedItems] = useState([]);
+  const [savedOutfits, setSavedOutfits] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const tabs = ['Tops', 'Bottoms', 'Shoes'];
+  const tabs = ['Tops', 'Bottoms', 'Shoes', 'Saved Outfits'];
 
   // Redirect if not logged in
   useEffect(() => {
@@ -31,11 +32,20 @@ const VirtualCloset = () => {
 
   const loadItems = async () => {
     try {
-      const response = await fetch(`${API_URL}/wardrobe/${selectedTab.toLowerCase()}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        setUploadedItems(result.data || []);
+      if (selectedTab === 'Saved Outfits') {
+        const response = await fetch(`${API_URL}/saved-outfits?user_id=${user?.id}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          setSavedOutfits(result.data || []);
+        }
+      } else {
+        const response = await fetch(`${API_URL}/wardrobe/${selectedTab.toLowerCase()}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          setUploadedItems(result.data || []);
+        }
       }
     } catch (error) {
       console.error('Error loading items:', error);
@@ -161,6 +171,28 @@ const VirtualCloset = () => {
     }
   };
 
+  const handleDeleteOutfit = async (outfitId) => {
+    if (!confirm('Are you sure you want to delete this saved outfit?')) return;
+
+    try {
+      const response = await fetch(`${API_URL}/saved-outfits/${outfitId}`, {
+        method: 'DELETE',
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setSavedOutfits(prev => prev.filter(outfit => outfit.id !== outfitId));
+        alert('Outfit deleted successfully! ✅');
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error('Error deleting outfit:', error);
+      alert('Failed to delete outfit');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -226,18 +258,19 @@ const VirtualCloset = () => {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Upload Area */}
-        <div
-          className={`border-2 border-dashed rounded-xl p-12 text-center mb-8 transition relative ${
-            dragActive 
-              ? 'border-blue-500 bg-blue-50' 
-              : 'border-gray-300 bg-white'
-          } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-        >
+        {/* Upload Area - Only show for wardrobe items, not saved outfits */}
+        {selectedTab !== 'Saved Outfits' && (
+          <div
+            className={`border-2 border-dashed rounded-xl p-12 text-center mb-8 transition relative ${
+              dragActive 
+                ? 'border-blue-500 bg-blue-50' 
+                : 'border-gray-300 bg-white'
+            } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+          >
           {uploading ? (
             <div className="flex flex-col items-center">
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
@@ -284,6 +317,7 @@ const VirtualCloset = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* Tabs */}
         <div className="flex space-x-1 mb-6 border-b border-gray-200">
@@ -302,9 +336,98 @@ const VirtualCloset = () => {
           ))}
         </div>
 
-        {/* Items Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {uploadedItems.length === 0 ? (
+        {/* Content */}
+        {selectedTab === 'Saved Outfits' ? (
+          /* Saved Outfits View */
+          <div className="space-y-6">
+            {savedOutfits.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-xl">
+                <Sparkles className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">No saved outfits yet</p>
+                <p className="text-gray-400 text-sm mt-2">Create and save outfits from the recommendations page</p>
+              </div>
+            ) : (
+              savedOutfits.map((outfit) => (
+                <div key={outfit.id} className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">{outfit.occasion}</h3>
+                      <p className="text-sm text-gray-500">
+                        Saved on {new Date(outfit.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteOutfit(outfit.id)}
+                      className="p-2 hover:bg-red-50 rounded-lg transition group"
+                      title="Delete outfit"
+                    >
+                      <Trash2 className="w-5 h-5 text-gray-400 group-hover:text-red-500" />
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Top */}
+                    <div className="relative group">
+                      <div className="aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200">
+                        {outfit.top ? (
+                          <img 
+                            src={outfit.top.clean_image_url} 
+                            alt="Top"
+                            className="w-full h-full object-contain p-2"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <p className="text-xs text-gray-400">No top</p>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2 text-center">Top</p>
+                    </div>
+
+                    {/* Bottom */}
+                    <div className="relative group">
+                      <div className="aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200">
+                        {outfit.bottom ? (
+                          <img 
+                            src={outfit.bottom.clean_image_url} 
+                            alt="Bottom"
+                            className="w-full h-full object-contain p-2"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <p className="text-xs text-gray-400">No bottom</p>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2 text-center">Bottom</p>
+                    </div>
+
+                    {/* Shoes */}
+                    <div className="relative group">
+                      <div className="aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-pink-50 to-red-50 border-2 border-pink-200">
+                        {outfit.shoes ? (
+                          <img 
+                            src={outfit.shoes.clean_image_url} 
+                            alt="Shoes"
+                            className="w-full h-full object-contain p-2"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <p className="text-xs text-gray-400">No shoes</p>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2 text-center">Shoes</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          /* Items Grid */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {uploadedItems.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -329,7 +452,8 @@ const VirtualCloset = () => {
               </div>
             ))
           )}
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );

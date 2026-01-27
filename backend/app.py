@@ -241,6 +241,86 @@ def save_outfit():
             'error': str(e)
         }), 500
 
+@app.route('/api/saved-outfits', methods=['GET'])
+def get_saved_outfits():
+    """Get all saved outfits for a user with full wardrobe item details"""
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User ID required'
+            }), 400
+        
+        # Get saved outfits
+        outfits_result = supabase.table('saved_outfits').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+        
+        # Enrich with wardrobe item details
+        enriched_outfits = []
+        for outfit in outfits_result.data:
+            enriched = {
+                'id': outfit['id'],
+                'occasion': outfit['occasion'],
+                'created_at': outfit['created_at'],
+                'top': None,
+                'bottom': None,
+                'shoes': None
+            }
+            
+            # Fetch top details
+            if outfit.get('top_id'):
+                top_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['top_id']).execute()
+                if top_result.data:
+                    enriched['top'] = top_result.data[0]
+            
+            # Fetch bottom details
+            if outfit.get('bottom_id'):
+                bottom_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['bottom_id']).execute()
+                if bottom_result.data:
+                    enriched['bottom'] = bottom_result.data[0]
+            
+            # Fetch shoes details
+            if outfit.get('shoes_id'):
+                shoes_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['shoes_id']).execute()
+                if shoes_result.data:
+                    enriched['shoes'] = shoes_result.data[0]
+            
+            enriched_outfits.append(enriched)
+        
+        print(f"📋 Found {len(enriched_outfits)} saved outfits for user {user_id}")
+        
+        return jsonify({
+            'success': True,
+            'data': enriched_outfits
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching saved outfits: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/saved-outfits/<outfit_id>', methods=['DELETE'])
+def delete_saved_outfit(outfit_id):
+    """Delete a saved outfit"""
+    try:
+        result = supabase.table('saved_outfits').delete().eq('id', outfit_id).execute()
+        
+        print(f"🗑️ Deleted saved outfit: {outfit_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Saved outfit deleted successfully'
+        }), 200
+    except Exception as e:
+        print(f"❌ Error deleting saved outfit: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/recommend-outfit', methods=['POST'])
 def recommend_outfit():
     """
