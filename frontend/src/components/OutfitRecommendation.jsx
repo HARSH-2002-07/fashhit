@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Home, User, RefreshCw, Sparkles, Loader2, Heart, LogOut } from 'lucide-react';
+import { 
+  Home, User, RefreshCw, Sparkles, Loader2, Heart, LogOut, 
+  CloudRain, ShoppingBag, ArrowRight, Shirt, Zap, MapPin 
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,81 +11,40 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const OutfitRecommendation = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  
+  // --- State Management ---
   const [hasOutfit, setHasOutfit] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentOutfit, setCurrentOutfit] = useState(null);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [scenario, setScenario] = useState('');
-  const [showScenarioEdit, setShowScenarioEdit] = useState(false);
-  const [tempScenario, setTempScenario] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [shoppingTip, setShoppingTip] = useState(null);
   const [weather, setWeather] = useState(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
+  // --- Logic Handlers ---
   const handleRecommend = async () => {
+    if (!scenario.trim()) return;
     setLoading(true);
     setError(null);
     
     try {
       const response = await fetch(`${API_URL}/recommend-outfit`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: scenario || 'casual everyday outfit',
-          user_id: user?.id
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: scenario, user_id: user?.id })
       });
 
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to generate outfit');
-      }
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to generate');
 
       setCurrentOutfit(result.outfit);
       setShoppingTip(result.shopping_tip);
       setWeather(result.weather);
       setHasOutfit(true);
     } catch (error) {
-      console.error('Error generating outfit:', error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGenerateAnother = async (customScenario = null) => {
-    setLoading(true);
-    setError(null);
-    
-    const scenarioToUse = customScenario !== null ? customScenario : scenario;
-    
-    try {
-      const response = await fetch(`${API_URL}/recommend-outfit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: scenarioToUse || 'casual everyday outfit',
-          user_id: user?.id
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to generate outfit');
-      }
-
-      setCurrentOutfit(result.outfit);
-      setShoppingTip(result.shopping_tip);
-      setWeather(result.weather);
-    } catch (error) {
-      console.error('Error generating outfit:', error);
+      console.error('Error:', error);
       setError(error.message);
     } finally {
       setLoading(false);
@@ -94,9 +56,7 @@ const OutfitRecommendation = () => {
     try {
       const response = await fetch(`${API_URL}/save-outfit`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: user?.id,
           outfit: currentOutfit,
@@ -106,353 +66,280 @@ const OutfitRecommendation = () => {
       });
 
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to save outfit');
-      }
+      if (!response.ok || !result.success) throw new Error('Failed to save');
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
-      console.error('Error saving outfit:', error);
       setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTryAnotherLook = () => {
-    setTempScenario(scenario);
-    setShowScenarioEdit(true);
-  };
-
-  const handleConfirmScenario = () => {
-    setScenario(tempScenario);
-    setShowScenarioEdit(false);
-    handleGenerateAnother(tempScenario);
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <button 
-            onClick={() => navigate('/')}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
-          >
-            <Home className="w-5 h-5 text-gray-600" />
-          </button>
-          
-          <div className="absolute left-1/2 transform -translate-x-1/2">
-            <h1 className="text-xl font-semibold text-gray-800">Your AI-Recommended Outfit</h1>
-          </div>
-          
-          {/* User Menu */}
-          <div className="relative">
-            <button 
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition"
-            >
-              <User className="w-5 h-5 text-gray-600" />
-              {user && (
-                <span className="text-sm text-gray-600 hidden sm:inline">
-                  {user.email?.split('@')[0]}
-                </span>
-              )}
-            </button>
-            
-            {/* Dropdown Menu */}
-            {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                <div className="px-4 py-2 border-b border-gray-100">
-                  <p className="text-sm font-medium text-gray-700">
-                    {user?.user_metadata?.full_name || 'User'}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                </div>
-                <button
-                  onClick={async () => {
-                    await signOut();
-                    navigate('/');
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            )}
+    <div className="flex h-screen bg-[#F8F9FB] overflow-hidden font-sans text-slate-800">
+      
+      {/* --- SIDEBAR: CONTROLS & CONTEXT --- */}
+      <aside className="w-[400px] bg-white border-r border-slate-200 flex flex-col z-20 shadow-xl relative">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">W</div>
+            <span className="font-bold text-xl tracking-tight text-slate-900">Wardrobe<span className="text-indigo-600">AI</span></span>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        {!hasOutfit ? (
-          /* Initial State - Show Recommend Button */
-          <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-6">
-                <Sparkles className="w-10 h-10 text-white" />
-              </div>
-              <h2 className="text-4xl font-bold text-gray-900 mb-4">
-                Ready for Your Perfect Look?
-              </h2>
-              <p className="text-lg text-gray-600 max-w-md mx-auto mb-8">
-                Our AI will analyze your wardrobe and create the perfect outfit combination based on your occasion.
-              </p>
-
-              {/* Scenario Input */}
-              <div className="max-w-xl mx-auto mb-8">
-                <label htmlFor="scenario" className="block text-left text-sm font-semibold text-gray-700 mb-3">
-                  What's the occasion? ✨
-                </label>
-                <div className="relative">
-                  <input
-                    id="scenario"
-                    type="text"
-                    value={scenario}
-                    onChange={(e) => setScenario(e.target.value)}
-                    placeholder="e.g., Formal office meeting, Casual coffee date, Party at night club..."
-                    className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition outline-none shadow-sm"
-                  />
-                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    <Sparkles className="w-5 h-5" />
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500 mt-2 text-left">
-                  Describe where you're going or the vibe you want
-                </p>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          
+          {/* Input Section */}
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Curate your look</h2>
+              <p className="text-slate-500 text-sm">Where are you headed today?</p>
+            </div>
+            
+            <div className="relative group">
+              <textarea
+                value={scenario}
+                onChange={(e) => setScenario(e.target.value)}
+                placeholder="e.g. A rooftop dinner date in Tokyo..."
+                className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none text-slate-700 placeholder:text-slate-400"
+              />
+              <div className="absolute bottom-3 right-3">
+                <Sparkles className={`w-5 h-5 ${scenario ? 'text-indigo-500' : 'text-slate-300'}`} />
               </div>
             </div>
 
             <button
               onClick={handleRecommend}
               disabled={loading || !scenario.trim()}
-              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white px-12 py-4 rounded-full text-lg font-semibold transition shadow-xl hover:shadow-2xl transform hover:scale-105 flex items-center space-x-3"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-semibold shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 group"
             >
               {loading ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  <span>Creating Your Outfit...</span>
-                </>
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  <Sparkles className="w-6 h-6" />
-                  <span>Recommend Outfit</span>
+                  <Zap className="w-5 h-5 fill-current" />
+                  <span>Generate Outfit</span>
                 </>
               )}
             </button>
-
-            {!scenario.trim() && !loading && (
-              <p className="text-sm text-gray-500 mt-4">
-                Please enter an occasion to get started
-              </p>
-            )}
-
+            
             {error && (
-              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm max-w-md">
-                <p className="font-medium">⚠️ {error}</p>
-                {error.includes('No items') && (
-                  <button
-                    onClick={() => navigate('/closet')}
-                    className="mt-2 text-blue-600 hover:text-blue-700 underline"
-                  >
-                    Go to Virtual Closet to add items
-                  </button>
-                )}
+              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex gap-2">
+                <span className="font-bold">Error:</span> {error}
               </div>
             )}
           </div>
-        ) : (
-          /* Show Outfit Recommendation */
-          <>
-            <div className="text-center mb-12">
-              <div className="inline-block px-6 py-2 bg-gradient-to-r from-blue-100 to-purple-100 rounded-full mb-4">
-                <p className="text-sm font-semibold text-gray-700">
-                  🎯 Occasion: <span className="text-blue-600">{scenario}</span>
-                </p>
-              </div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">
-                Your AI-Recommended Outfit
-              </h2>
-              <p className="text-gray-600">
-                Perfectly curated for your occasion
-              </p>
-            </div>
 
-            {/* Outfit Display */}
-            <div className="bg-white rounded-2xl shadow-lg p-12 mb-8 relative">
-              {loading && (
-                <div className="absolute inset-0 bg-white bg-opacity-90 rounded-2xl flex items-center justify-center z-10">
-                  <div className="flex flex-col items-center">
-                    <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-                    <p className="text-gray-600 font-medium">Generating new look...</p>
-                  </div>
-                </div>
-              )}
+          {/* Context Widgets (Visible only after generation) */}
+          {hasOutfit && !loading && (
+            <div className="space-y-4 animate-in slide-in-from-left-4 duration-500">
               
-              <div className="flex flex-col items-center justify-center space-y-6">
-                {/* Outerwear (if available) */}
-                {currentOutfit?.outerwear && (
-                  <div className="w-64 h-64 bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg flex items-center justify-center overflow-hidden border-2 border-amber-200">
-                    <img 
-                      src={currentOutfit.outerwear.clean_image_url} 
-                      alt="Outerwear" 
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                )}
-
-                {/* Top */}
-                <div className="w-64 h-64 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg flex items-center justify-center overflow-hidden border-2 border-blue-200">
-                  {currentOutfit?.tops ? (
-                    <img 
-                      src={currentOutfit.tops.clean_image_url} 
-                      alt="Top" 
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="text-center">
-                      <svg className="w-32 h-32 text-blue-300 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M20.822 18.096c-3.439-.794-6.64-1.49-5.09-4.418 4.72-8.912 1.251-13.678-3.732-13.678-5.082 0-8.464 4.949-3.732 13.678 1.597 2.945-1.725 3.641-5.09 4.418-3.073.71-3.188 2.236-3.178 4.904l.004 1h23.99l.004-.969c.012-2.688-.092-4.222-3.176-4.935z"/>
-                      </svg>
-                      <p className="text-sm text-gray-500 mt-2">No top available</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Grid with Bottoms and Shoes */}
-                <div className="grid grid-cols-2 gap-6">
-                  {/* Bottoms */}
-                  <div className="w-48 h-48 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg flex items-center justify-center overflow-hidden border-2 border-purple-200">
-                    {currentOutfit?.bottoms ? (
-                      <img 
-                        src={currentOutfit.bottoms.clean_image_url} 
-                        alt="Bottom" 
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center">
-                        <svg className="w-24 h-24 text-purple-300 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M20.822 18.096c-3.439-.794-6.64-1.49-5.09-4.418 4.72-8.912 1.251-13.678-3.732-13.678-5.082 0-8.464 4.949-3.732 13.678 1.597 2.945-1.725 3.641-5.09 4.418-3.073.71-3.188 2.236-3.178 4.904l.004 1h23.99l.004-.969c.012-2.688-.092-4.222-3.176-4.935z"/>
-                        </svg>
-                        <p className="text-xs text-gray-500 mt-2">No bottoms</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Shoes */}
-                  <div className="w-48 h-48 bg-gradient-to-br from-pink-50 to-red-50 rounded-lg flex items-center justify-center overflow-hidden border-2 border-pink-200">
-                    {currentOutfit?.shoes ? (
-                      <img 
-                        src={currentOutfit.shoes.clean_image_url} 
-                        alt="Shoes" 
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center">
-                        <svg className="w-24 h-24 text-pink-300 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M22 7h-7V1H9v6H2l10 9 10-9zM3.5 17l-.5 4h18l-.5-4H3.5z"/>
-                        </svg>
-                        <p className="text-xs text-gray-500 mt-2">No shoes</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Weather & Shopping Tip */}
-            <div className="space-y-4 mb-8">
+              {/* Weather Widget */}
               {weather && (
-                <div className="bg-gradient-to-r from-blue-50 to-sky-50 rounded-xl p-4 border border-blue-200">
-                  <p className="text-sm font-medium text-gray-700">
-                    🌍 {weather.city}: {weather.condition}, {weather.temp}°C
-                  </p>
+                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conditions</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <MapPin className="w-4 h-4 text-indigo-500" />
+                      <span className="font-semibold text-slate-900">{weather.city}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-slate-800 mt-1">
+                      {weather.temp}°C <span className="text-base font-normal text-slate-500">{weather.condition}</span>
+                    </div>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
+                    <CloudRain className="w-6 h-6" />
+                  </div>
                 </div>
               )}
+
+              {/* Shopping Insight */}
               {shoppingTip && (
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-                  <p className="text-sm font-medium text-gray-700">
-                    💡 <span className="font-semibold">Shopping Tip:</span> {shoppingTip}
-                  </p>
+                <div className="relative overflow-hidden bg-gradient-to-br from-violet-600 to-indigo-700 p-5 rounded-2xl text-white shadow-lg">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-8 -mt-8 blur-xl"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2 text-indigo-100">
+                      <ShoppingBag className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Stylist Tip</span>
+                    </div>
+                    <p className="font-medium leading-snug">{shoppingTip}</p>
+                  </div>
                 </div>
               )}
             </div>
+          )}
+        </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center justify-center space-x-4">
-              <button
-                onClick={handleSaveOutfit}
-                disabled={loading}
-                className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white px-8 py-3 rounded-full font-medium transition shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center space-x-2"
-              >
-                <Heart className="w-5 h-5" />
-                <span>Save Outfit</span>
-              </button>
-              
-              <button
-                onClick={handleTryAnotherLook}
-                disabled={loading}
-                className="bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-700 px-8 py-3 rounded-full font-medium transition border-2 border-gray-300 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center space-x-2"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                <span>Try Another Look</span>
-              </button>
+        {/* User Footer */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold border border-indigo-200">
+                {user?.email?.[0].toUpperCase() || 'U'}
+              </div>
+              <div className="text-sm">
+                <p className="font-semibold text-slate-900 truncate max-w-[120px]">
+                  {user?.user_metadata?.full_name || 'User'}
+                </p>
+                <button onClick={signOut} className="text-slate-500 hover:text-red-600 text-xs flex items-center gap-1 transition-colors">
+                  <LogOut className="w-3 h-3" /> Sign Out
+                </button>
+              </div>
             </div>
-          </>
-        )}
-      </main>
-
-      {/* Scenario Edit Modal */}
-      {showScenarioEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">Change Occasion?</h3>
-            <p className="text-gray-600 mb-6">Update the occasion or keep the current one</p>
-            
-            <div className="mb-6">
-              <label htmlFor="edit-scenario" className="block text-sm font-semibold text-gray-700 mb-2">
-                What's the occasion? ✨
-              </label>
-              <input
-                id="edit-scenario"
-                type="text"
-                value={tempScenario}
-                onChange={(e) => setTempScenario(e.target.value)}
-                placeholder="e.g., Formal office meeting, Casual coffee date..."
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition outline-none"
-              />
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowScenarioEdit(false)}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmScenario}
-                disabled={!tempScenario.trim()}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition"
-              >
-                Generate New Look
-              </button>
-            </div>
+            <button onClick={() => navigate('/closet')} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-indigo-600 transition-colors">
+              <Shirt className="w-5 h-5" />
+            </button>
           </div>
         </div>
-      )}
+      </aside>
 
-      {/* Save Success Notification */}
-      {saveSuccess && (
-        <div className="fixed bottom-8 right-8 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center space-x-3 animate-slide-up z-50">
-          <Heart className="w-6 h-6 fill-current" />
-          <div>
-            <p className="font-semibold">Outfit Saved!</p>
-            <p className="text-sm text-green-100">Added to your collection</p>
+      {/* --- MAIN CANVAS: OUTFIT DISPLAY --- */}
+      <main className="flex-1 relative overflow-y-auto bg-slate-50/50 p-8 lg:p-12 flex flex-col">
+        
+        {!hasOutfit ? (
+          /* Empty State */
+          <div className="flex-1 flex flex-col items-center justify-center text-center opacity-60">
+            <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+              <Sparkles className="w-10 h-10 text-slate-300" />
+            </div>
+            <h3 className="text-xl font-semibold text-slate-700">No outfit generated yet</h3>
+            <p className="text-slate-500 max-w-xs mt-2">Use the sidebar to describe your occasion and get AI recommendations.</p>
+          </div>
+        ) : (
+          /* The Outfit Grid */
+          <div className="max-w-5xl mx-auto w-full animate-in fade-in zoom-in duration-500">
+            
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900">Your Generated Look</h1>
+                <p className="text-slate-500 mt-1">Curated for: <span className="font-medium text-indigo-600">"{scenario}"</span></p>
+              </div>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={handleSaveOutfit}
+                  className={`px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all ${
+                    saveSuccess 
+                      ? 'bg-green-500 text-white shadow-lg shadow-green-200' 
+                      : 'bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md'
+                  }`}
+                >
+                  <Heart className={`w-5 h-5 ${saveSuccess ? 'fill-current' : ''}`} />
+                  {saveSuccess ? 'Saved!' : 'Save Look'}
+                </button>
+                <button 
+                  onClick={handleRecommend} 
+                  className="p-3 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Bento Grid Layout */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-[600px]">
+              
+              {/* Col 1: Outerwear & Top (Stacked) */}
+              <div className="lg:col-span-1 flex flex-col gap-6 h-full">
+                {/* Outerwear */}
+                <ItemCard 
+                  item={currentOutfit?.outerwear} 
+                  label="Outerwear" 
+                  fallbackIcon={<Shirt />}
+                  className="flex-1"
+                />
+                {/* Top */}
+                <ItemCard 
+                  item={currentOutfit?.tops} 
+                  label="Top" 
+                  fallbackIcon={<Shirt />}
+                  className="flex-1"
+                />
+              </div>
+
+              {/* Col 2: Bottoms (Tall Hero) */}
+              <div className="lg:col-span-2 h-full">
+                <ItemCard 
+                  item={currentOutfit?.bottoms} 
+                  label="Bottoms" 
+                  fallbackIcon={<Shirt />}
+                  className="h-full"
+                  isHero={true}
+                />
+              </div>
+
+              {/* Col 3: Shoes (Standard) */}
+              <div className="lg:col-span-1 flex flex-col gap-6 h-full">
+                <ItemCard 
+                  item={currentOutfit?.shoes} 
+                  label="Footwear" 
+                  fallbackIcon={<ShoppingBag />}
+                  className="h-1/2"
+                />
+                
+                {/* Decorative / Info Block */}
+                <div className="h-1/2 bg-slate-900 rounded-3xl p-6 flex flex-col justify-between text-slate-300">
+                  <Sparkles className="w-8 h-8 text-yellow-400" />
+                  <div>
+                    <p className="text-xs uppercase tracking-widest font-bold mb-1 opacity-50">Confidence Score</p>
+                    <p className="text-3xl font-bold text-white">98%</p>
+                    <p className="text-xs mt-2 text-slate-400">Perfectly matched for weather & style.</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+// --- Helper Component: Individual Item Card ---
+const ItemCard = ({ item, label, fallbackIcon, className, isHero }) => {
+  return (
+    <div className={`relative group bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 ${className}`}>
+      {/* Background Gradient for depth */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-white opacity-50"></div>
+      
+      <div className="absolute top-4 left-4 z-10">
+        <span className="px-3 py-1 bg-white/90 backdrop-blur-md rounded-full text-xs font-bold text-slate-500 uppercase tracking-wider border border-slate-100">
+          {label}
+        </span>
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center p-6">
+        {item ? (
+          <img 
+            src={item.clean_image_url} 
+            alt={label} 
+            className={`w-full h-full object-contain mix-blend-multiply drop-shadow-lg group-hover:scale-110 transition-transform duration-500 ${isHero ? 'p-4' : ''}`}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center text-slate-300">
+            {React.cloneElement(fallbackIcon, { className: "w-12 h-12 mb-2 opacity-50" })}
+            <span className="text-sm font-medium">None Selected</span>
+          </div>
+        )}
+      </div>
+
+      {/* Hover Details (Glassmorphism) */}
+      {item && (
+        <div className="absolute inset-x-4 bottom-4 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+          <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-slate-100">
+            <h4 className="font-bold text-slate-900 truncate">{item.attributes?.sub_category || label}</h4>
+            <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+              {item.attributes?.primary_color}
+              <span className="mx-1">•</span>
+              {item.attributes?.formality}
+            </div>
           </div>
         </div>
       )}
