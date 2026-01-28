@@ -12,7 +12,10 @@
     "pattern": "Striped",
     "material_appearance": "Knit",
     "seasonality": "Summer",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Slim",
+    "cut": "Standard",
+    "occasion_tag": "Beach"
   },
   "embedding": [
     -0.34470313787460327,

@@ -9,7 +9,10 @@
     "pattern": "Solid",
     "material_appearance": "Denim",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Skinny",
+    "cut": "Ankle",
+    "occasion_tag": "Casual"
   },
   "embedding": [
     -0.052919089794158936,

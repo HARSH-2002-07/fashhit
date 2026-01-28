@@ -11,7 +11,10 @@
     "pattern": "Solid",
     "material_appearance": "Corduroy",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Ankle",
+    "occasion_tag": "Beach"
   },
   "embedding": [
     0.07668149471282959,

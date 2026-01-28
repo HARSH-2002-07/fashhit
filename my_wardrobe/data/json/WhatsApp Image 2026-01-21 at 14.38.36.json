@@ -12,7 +12,10 @@
     "pattern": "Logo",
     "material_appearance": "Fleece",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Long",
+    "occasion_tag": "Gym"
   },
   "embedding": [
     0.20103107392787933,

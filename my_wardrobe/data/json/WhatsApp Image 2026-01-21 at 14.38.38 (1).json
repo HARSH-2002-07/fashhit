@@ -13,7 +13,10 @@
     "pattern": "Solid",
     "material_appearance": "Cotton",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Skinny",
+    "cut": "Cropped",
+    "occasion_tag": "Casual"
   },
   "embedding": [
     -0.1541549265384674,

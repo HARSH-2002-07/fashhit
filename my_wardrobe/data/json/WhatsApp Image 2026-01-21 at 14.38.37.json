@@ -9,7 +9,10 @@
     "pattern": "Ribbed",
     "material_appearance": "Knit",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Slim",
+    "cut": "Cropped",
+    "occasion_tag": "Gym"
   },
   "embedding": [
     -0.03745226562023163,

@@ -11,7 +11,10 @@
     "pattern": "Solid",
     "material_appearance": "Mesh, Synthetic",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Relaxed",
+    "cut": "Standard",
+    "occasion_tag": "Casual"
   },
   "embedding": [
     -0.17829371988773346,

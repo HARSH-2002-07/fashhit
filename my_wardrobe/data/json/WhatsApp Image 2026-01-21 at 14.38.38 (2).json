@@ -12,7 +12,10 @@
     "pattern": "Solid",
     "material_appearance": "Denim",
     "seasonality": "All-Season",
-    "formality": "Smart-Casual"
+    "formality": "Smart-Casual",
+    "fit": "Skinny",
+    "cut": "Ankle",
+    "occasion_tag": "Gym"
   },
   "embedding": [
     -0.22710318863391876,

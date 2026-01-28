@@ -12,7 +12,10 @@
     "pattern": "Striped",
     "material_appearance": "Cotton",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Standard",
+    "occasion_tag": "Beach"
   },
   "embedding": [
     -0.414335161447525,

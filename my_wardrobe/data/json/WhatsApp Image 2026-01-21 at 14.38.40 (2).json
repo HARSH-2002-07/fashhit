@@ -11,7 +11,10 @@
     "pattern": "Solid",
     "material_appearance": "Textured Fabric",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Standard",
+    "occasion_tag": "Formal"
   },
   "embedding": [
     -0.26263803243637085,

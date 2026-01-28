@@ -13,7 +13,10 @@
     "pattern": "Logo",
     "material_appearance": "Knit",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Cropped",
+    "occasion_tag": "Beach"
   },
   "embedding": [
     -0.17968474328517914,

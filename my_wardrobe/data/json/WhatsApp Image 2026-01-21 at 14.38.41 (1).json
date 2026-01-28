@@ -12,7 +12,10 @@
     "pattern": "Floral",
     "material_appearance": "Cotton",
     "seasonality": "All-Season",
-    "formality": "Smart-Casual"
+    "formality": "Smart-Casual",
+    "fit": "Regular",
+    "cut": "Long",
+    "occasion_tag": "Beach"
   },
   "embedding": [
     0.13383498787879944,

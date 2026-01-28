@@ -16,7 +16,7 @@ const VirtualCloset = () => {
   const [uploadProgress, setUploadProgress] = useState([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const tabs = ['Tops', 'Bottoms', 'Shoes', 'Saved Outfits'];
+  const tabs = ['Tops', 'Bottoms', 'Shoes', 'Outerwear', 'Saved Outfits'];
 
   // Redirect if not logged in
   useEffect(() => {

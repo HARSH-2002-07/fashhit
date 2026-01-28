@@ -17,6 +17,8 @@ const OutfitRecommendation = () => {
   const [showScenarioEdit, setShowScenarioEdit] = useState(false);
   const [tempScenario, setTempScenario] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [shoppingTip, setShoppingTip] = useState(null);
+  const [weather, setWeather] = useState(null);
 
   const handleRecommend = async () => {
     setLoading(true);
@@ -41,6 +43,8 @@ const OutfitRecommendation = () => {
       }
 
       setCurrentOutfit(result.outfit);
+      setShoppingTip(result.shopping_tip);
+      setWeather(result.weather);
       setHasOutfit(true);
     } catch (error) {
       console.error('Error generating outfit:', error);
@@ -75,6 +79,8 @@ const OutfitRecommendation = () => {
       }
 
       setCurrentOutfit(result.outfit);
+      setShoppingTip(result.shopping_tip);
+      setWeather(result.weather);
     } catch (error) {
       console.error('Error generating outfit:', error);
       setError(error.message);
@@ -288,6 +294,17 @@ const OutfitRecommendation = () => {
               )}
               
               <div className="flex flex-col items-center justify-center space-y-6">
+                {/* Outerwear (if available) */}
+                {currentOutfit?.outerwear && (
+                  <div className="w-64 h-64 bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg flex items-center justify-center overflow-hidden border-2 border-amber-200">
+                    <img 
+                      src={currentOutfit.outerwear.clean_image_url} 
+                      alt="Outerwear" 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+
                 {/* Top */}
                 <div className="w-64 h-64 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg flex items-center justify-center overflow-hidden border-2 border-blue-200">
                   {currentOutfit?.tops ? (
@@ -345,6 +362,24 @@ const OutfitRecommendation = () => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Weather & Shopping Tip */}
+            <div className="space-y-4 mb-8">
+              {weather && (
+                <div className="bg-gradient-to-r from-blue-50 to-sky-50 rounded-xl p-4 border border-blue-200">
+                  <p className="text-sm font-medium text-gray-700">
+                    🌍 {weather.city}: {weather.condition}, {weather.temp}°C
+                  </p>
+                </div>
+              )}
+              {shoppingTip && (
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+                  <p className="text-sm font-medium text-gray-700">
+                    💡 <span className="font-semibold">Shopping Tip:</span> {shoppingTip}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}

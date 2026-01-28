@@ -12,7 +12,10 @@
     "pattern": "Solid",
     "material_appearance": "Corduroy",
     "seasonality": "Winter",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Cropped",
+    "occasion_tag": "Formal"
   },
   "embedding": [
     0.19460490345954895,

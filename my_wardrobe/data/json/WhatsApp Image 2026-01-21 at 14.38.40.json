@@ -12,7 +12,10 @@
     "pattern": "Pinstripe",
     "material_appearance": "Knit",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Standard",
+    "occasion_tag": "Beach"
   },
   "embedding": [
     0.013414721935987473,

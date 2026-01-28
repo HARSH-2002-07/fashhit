@@ -1,250 +1,267 @@
+import requests
+import json
+import os
 import numpy as np
-import colorsys
-from typing import List, Dict, Tuple, Optional
+import matplotlib.pyplot as plt
+from PIL import Image
+from typing import List, Dict
 from fashion_clip.fashion_clip import FashionCLIP
 from store import WardrobeStore
-from ontology import OUTFIT_TEMPLATES, Category
+from ontology import OUTFIT_TEMPLATES
 
-# --- CONFIGURATION: COLOR FALLBACKS ---
-# If Gemini didn't save a specific HEX code, we use these approximations
-# to ensure the math never crashes.
-NAME_TO_HEX = {
-    "black": "#000000", "white": "#FFFFFF", "grey": "#808080", "gray": "#808080",
-    "navy": "#000080", "blue": "#0000FF", "light blue": "#ADD8E6",
-    "red": "#FF0000", "maroon": "#800000", "burgundy": "#800020",
-    "green": "#008000", "khaki": "#F0E68C", "olive": "#808000",
-    "beige": "#F5F5DC", "tan": "#D2B48C", "brown": "#A52A2A",
-    "yellow": "#FFFF00", "orange": "#FFA500", "pink": "#FFC0CB",
-    "purple": "#800080", "cream": "#FFFDD0"
-}
-
-# --- MATH HELPER: COLOR PHYSICS ---
-def hex_to_hsv(hex_input: str) -> Tuple[float, float, float]:
-    """
-    Converts HEX (#FF0000) or Color Name ('Red') to HSV (Hue, Saturation, Value).
-    Returns (0.0, 0.0, 0.0) if invalid.
-    """
-    # 1. Normalize input
-    if not hex_input:
-        return (0.0, 0.0, 0.0)
-    
-    hex_clean = hex_input.lower().strip()
-    
-    # 2. Check if it's a name -> Convert to Hex
-    if hex_clean in NAME_TO_HEX:
-        hex_clean = NAME_TO_HEX[hex_clean]
-    
-    # 3. Parse Hex
-    hex_clean = hex_clean.lstrip('#')
-    if len(hex_clean) != 6:
-        return (0.0, 0.0, 0.0) # Fail safe
+# --- 1. VISUALIZER ---
+class Visualizer:
+    @staticmethod
+    def show_outfit(outfit_plan: dict, title: str, recommendation: str = None):
+        items = list(outfit_plan.values())
+        if not items: return
         
-    try:
-        r = int(hex_clean[0:2], 16)
-        g = int(hex_clean[2:4], 16)
-        b = int(hex_clean[4:6], 16)
-        # Convert RGB (0-255) to HSV (0.0-1.0)
-        return colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
-    except ValueError:
-        return (0.0, 0.0, 0.0)
+        # Adjust layout for title space
+        fig, axes = plt.subplots(1, len(items), figsize=(12, 6))
+        if len(items) == 1: axes = [axes]
+        
+        full_title = title
+        if recommendation:
+            full_title += f"\n\n SHOPPING TIP: {recommendation}"
+            
+        fig.suptitle(full_title, fontsize=14)
+        
+        for ax, (slot, item) in zip(axes, outfit_plan.items()):
+            try:
+                img_path = item['paths']['clean']
+                img = Image.open(img_path)
+                ax.imshow(img)
+                ax.axis('off')
+                meta = item['meta']
+                label = f"{slot}\n{meta.get('sub_category')}\n{meta.get('primary_color')}\n({meta.get('fit', 'Reg')})"
+                ax.set_title(label, fontsize=9)
+            except: 
+                ax.axis('off')
+        plt.tight_layout()
+        plt.show()
+
+# --- 2. LIVE WEATHER ---
+class LiveWeather:
+    @staticmethod
+    def get_weather():
+        try:
+            loc = requests.get("http://ip-api.com/json/", timeout=2).json()
+            lat, lon = loc['lat'], loc['lon']
+            url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+            w = requests.get(url, timeout=2).json()
+            code = w['current_weather']['weathercode']
+            temp = w['current_weather']['temperature']
+            cond = "Clear"
+            if code in [1, 2, 3]: cond = "Cloudy"
+            elif code in [61, 63, 65, 80, 81, 82]: cond = "Rainy"
+            elif code in [71, 73, 75, 85, 86]: cond = "Snowy"
+            return {"condition": cond, "temp": temp, "city": loc['city']}
+        except:
+            return {"condition": "Clear", "temp": 25, "city": "Offline"}
+
+# --- 3. SHOPPING ENGINE (NEW) ---
+class ShoppingEngine:
+    def __init__(self, fclip: FashionCLIP, data_dir: str):
+        self.fclip = fclip
+        self.essentials = []
+        
+        # Load Essentials
+        path = os.path.join(data_dir, "essentials.json")
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                self.essentials = json.load(f)
+                print(f"🛍️  Virtual Store loaded: {len(self.essentials)} items")
+                
+            # Pre-compute vectors for virtual items using TEXT description
+            # This is the "Zero-Shot" magic
+            descriptions = [
+                f"{i['meta']['fit']} fit {i['meta']['primary_color']} {i['meta']['sub_category']}" 
+                for i in self.essentials
+            ]
+            self.vectors = self.fclip.encode_text(descriptions, batch_size=len(descriptions))
+        else:
+            print("⚠️ essentials.json not found. Shopping engine disabled.")
+
+    def find_upgrade(self, current_outfit: dict, current_score: float, query_vec) -> str:
+        if not self.essentials: return None
+        
+        best_upgrade = None
+        max_improvement = 0.0
+        
+        for slot, current_item in current_outfit.items():
+            current_cat = current_item['meta']['category']
+            current_sub = current_item['meta']['sub_category'].lower()
+            current_col = current_item['meta']['primary_color'].lower()
+            
+            for idx, v_item in enumerate(self.essentials):
+                # 1. Category Match
+                if v_item['meta']['category'] != current_cat: continue
+                
+                # --- NEW LOGIC: Redundancy Check ---
+                # If you are wearing "Black Boots" and virtual item is "Black Boots", skip.
+                v_sub = v_item['meta']['sub_category'].lower()
+                v_col = v_item['meta']['primary_color'].lower()
+                
+                if current_col in v_col and (current_sub in v_sub or v_sub in current_sub):
+                    continue # Skip redundant recommendation
+                # -----------------------------------
+
+                v_vec = self.vectors[idx]
+                relevance = np.dot(query_vec, v_vec)
+                improvement = relevance - 0.1 
+                
+                if improvement > max_improvement and improvement > 0.4:
+                    max_improvement = improvement
+                    best_upgrade = f"Buy {v_item['meta']['sub_category']} (Increases match score)"
+        
+        return best_upgrade
+
+# --- 4. LOGIC ENGINES (Existing) ---
+class SilhouetteEngine:
+    @staticmethod
+    def evaluate_proportion(top: dict, bottom: dict) -> float:
+        fit_top = top['meta'].get('fit', 'Regular')
+        fit_bot = bottom['meta'].get('fit', 'Regular')
+        if fit_top in ["Oversized", "Relaxed"] and fit_bot in ["Oversized", "Relaxed"]: return -0.2 
+        if fit_top == "Oversized" and fit_bot in ["Slim", "Skinny"]: return 0.2
+        if fit_top in ["Slim", "Skinny"] and fit_bot in ["Relaxed", "Oversized"]: return 0.2
+        if fit_top == "Slim" and fit_bot == "Slim": return 0.1
+        return 0.0
+
+class WeatherEngine:
+    SENSITIVE = ["suede", "silk", "satin", "velvet", "canvas", "mesh"]
+    @staticmethod
+    def is_safe(item: dict, cond: str) -> bool:
+        if "rain" not in cond.lower() and "snow" not in cond.lower(): return True
+        meta = item['meta']
+        name = meta.get('sub_category', '').lower()
+        if any(x in name for x in WeatherEngine.SENSITIVE): return False
+        if "footwear" in meta.get('category', '').lower() and "white" in meta.get('primary_color', '').lower(): return False
+        return True
+
+class ContextBrain:
+    @staticmethod
+    def detect_template(query: str, weather: dict, fclip: FashionCLIP) -> str:
+        q_low = query.lower()
+        cond = weather['condition'].lower()
+        temp = weather['temp']
+        if temp < 15 or "rain" in cond or "snow" in cond: return "layered"
+        triggers = ["jacket", "coat", "blazer", "suit", "layer", "bomber"]
+        if any(t in q_low for t in triggers): return "layered"
+        vecs = fclip.encode_text([query, "cold winter layered outfit", "warm summer outfit"], batch_size=3)
+        if np.dot(vecs[0], vecs[1]) > np.dot(vecs[0], vecs[2]): return "layered"
+        return "basic"
 
 class NeuroSymbolicEngine:
-    """
-    Hybrid Brain: Combines Rules (Symbolic) with Vectors (Neural).
-    """
-    
     @staticmethod
-    def get_visual_harmony(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
-        """
-        Calculates 'Vibe Match' using Deep Learning Vectors.
-        Captures texture, lighting, and complex style nuances.
-        """
-        norm_a = np.linalg.norm(vec_a)
-        norm_b = np.linalg.norm(vec_b)
-        
-        if norm_a == 0 or norm_b == 0: 
-            return 0.0
-        
-        # Cosine Similarity: (A . B) / (|A| * |B|)
-        sim = np.dot(vec_a, vec_b) / (norm_a * norm_b)
-        return float(sim)
-
-    @staticmethod
-    def get_color_score(color_a: str, color_b: str) -> float:
-        """
-        Mathematical Color Theory (HSV Distance)
-        """
-        h1, s1, v1 = hex_to_hsv(color_a)
-        h2, s2, v2 = hex_to_hsv(color_b)
-        
-        # 1. NEUTRALS Check (Low Saturation)
-        # If either is Gray/Black/White/Beige, it matches everything.
-        # Threshold: Saturation < 15% or Value < 15% (Very dark)
-        if s1 < 0.15 or s2 < 0.15 or v1 < 0.15 or v2 < 0.15:
-            return 0.3  # Safe match bonus
-
-        # 2. HUE DISTANCE (The Color Wheel)
-        diff = abs(h1 - h2)
-        if diff > 0.5: 
-            diff = 1.0 - diff # Handle wrap-around (0.9 is close to 0.1)
-        
-        # Analogous (0.0 - 0.15) -> Harmony (e.g. Green + Blue)
-        if diff < 0.15: 
-            return 0.25      
-        
-        # Complementary (0.4 - 0.6) -> Contrast (e.g. Blue + Orange)
-        if 0.4 < diff < 0.6: 
-            return 0.20 
-            
-        # Clash Zone (e.g. Red + Pink)
-        return -0.1
-
-    @staticmethod
-    def evaluate_pair(item_a: dict, item_b: dict, vec_a: np.ndarray, vec_b: np.ndarray) -> float:
-        """
-        The Master Equation: Combines 3 types of logic into one score.
-        """
-        score = 0.5 # Base Probability
-        
-        # --- A. NEURAL CHECK (30%) ---
-        # Do they visually look good together?
-        score += NeuroSymbolicEngine.get_visual_harmony(vec_a, vec_b) * 0.3
-        
-        # --- B. SYMBOLIC CHECK (40%) ---
-        # 1. Formality
+    def evaluate_pair(item_a, item_b, vec_a, vec_b):
+        score = 0.5
+        score += (np.dot(vec_a, vec_b) / (np.linalg.norm(vec_a) * np.linalg.norm(vec_b))) * 0.4
         f_a = item_a['meta'].get('formality', 'Casual')
         f_b = item_b['meta'].get('formality', 'Casual')
         if f_a != f_b:
-            if {f_a, f_b} == {"Formal", "Lounge"}: 
-                score -= 0.3 # Hard Veto
-            else: 
-                score -= 0.1 # Soft Penalty
-            
-        # 2. Pattern
-        p_a = item_a['meta'].get('pattern', 'Solid')
-        p_b = item_b['meta'].get('pattern', 'Solid')
-        # Avoid Pattern + Pattern
-        if p_a != 'Solid' and p_b != 'Solid': 
-            score -= 0.25
-        
-        # --- C. PHYSICS CHECK (30%) ---
-        # Color Math
-        # Try to get specific HEX, fallback to primary_color name
-        c_a = item_a['meta'].get('primary_color_hex', item_a['meta'].get('primary_color', 'black'))
-        c_b = item_b['meta'].get('primary_color_hex', item_b['meta'].get('primary_color', 'black'))
-        
-        score += NeuroSymbolicEngine.get_color_score(str(c_a), str(c_b)) * 0.3
-        
-        return np.clip(score, 0.0, 1.0)
+            if {f_a, f_b} == {"Formal", "Lounge"}: score -= 0.4 
+            else: score -= 0.1
+        cat_a = item_a['meta'].get('category')
+        cat_b = item_b['meta'].get('category')
+        if {cat_a, cat_b} == {"Top", "Bottom"}:
+            top = item_a if cat_a == "Top" else item_b
+            btm = item_b if cat_b == "Bottom" else item_a
+            score += SilhouetteEngine.evaluate_proportion(top, btm)
+        return score
 
-class ProPlanner:
+# --- 5. MASTER PLANNER V7 ---
+class ProPlannerV7:
     def __init__(self, store: WardrobeStore):
         self.store = store
-        print("🧠 Loading Neuro-Symbolic Planner...")
+        print("🧠 Loading Planner V7 (Shopping Enabled)...")
         self.fclip = FashionCLIP('fashion-clip')
         self.BEAM_WIDTH = 5
+        
+        # Init Shopping Brain
+        self.shopper = ShoppingEngine(self.fclip, store.data_dir)
 
-    def plan(self, user_query: str, template_name: str = "basic") -> dict:
-        print(f"\n🚀 Neuro-Symbolic Planning: '{user_query}'")
+    def apply_hybrid_ranking(self, candidates: List[dict], query: str) -> List[dict]:
+        q = query.lower()
+        boosters = ["leather", "denim", "linen", "boots", "sneakers", "hoodie", "bomber"]
+        active_boosts = [k for k in boosters if k in q]
+        formal_req = "formal" in q or "interview" in q or "wedding" in q
+        casual_req = "casual" in q or "chill" in q
         
-        # 1. User Intent Vector
-        # We wrap query in list [] because encode_text expects a batch
-        query_vec = self.fclip.encode_text([user_query], batch_size=1)[0]
+        for c in candidates:
+            meta = c['item']['meta']
+            desc = f"{meta.get('sub_category','')} {meta.get('material','')} {meta.get('category','')}".lower()
+            formality = meta.get('formality', 'Casual')
+            matches = sum(1 for k in active_boosts if k in desc)
+            if matches > 0: c['score'] += (matches * 0.5)
+            if formal_req and formality == "Casual": c['score'] -= 0.5 
+            if casual_req and formality == "Formal": c['score'] -= 0.3
+        return sorted(candidates, key=lambda x: x['score'], reverse=True)
+
+    def plan(self, user_query: str, manual_weather: str = None) -> dict:
+        weather = LiveWeather.get_weather()
+        if manual_weather: weather['condition'] = manual_weather 
         
-        # 2. Identify Structure
-        # e.g., [Category.TOP, Category.BOTTOM, Category.FOOTWEAR]
-        required_slots = OUTFIT_TEMPLATES.get(template_name, OUTFIT_TEMPLATES["basic"])
-        slot_names = [s.value for s in required_slots] # ["Top", "Bottom", "Footwear"]
+        print(f"\n🌍 {weather['city']}: {weather['condition']}, {weather['temp']}°C")
+        print(f"🚀 Planning for: '{user_query}'")
         
-        # 3. Retrieve Candidates (Vector Search)
-        # Pre-fetch 15 candidates per slot to give the beam search enough options
+        template_name = ContextBrain.detect_template(user_query, weather, self.fclip)
+        required_slots_enums = OUTFIT_TEMPLATES.get(template_name, OUTFIT_TEMPLATES["basic"])
+        slot_names = [s.value for s in required_slots_enums]
+        
+        q_vec = self.fclip.encode_text([user_query], batch_size=1)[0]
         candidates_map = {}
-        for slot in required_slots:
-            results = self.store.vector_search(query_vec, category_filter=slot, top_k=15)
-            candidates_map[slot.value] = results
-            if not results:
-                print(f"⚠️ Warning: No items found for {slot.value}")
+        
+        for slot_enum in required_slots_enums:
+            raw = self.store.vector_search(q_vec, category_filter=slot_enum, top_k=20)
+            ranked = self.apply_hybrid_ranking(raw, user_query)
+            valid = [r for r in ranked if WeatherEngine.is_safe(r['item'], weather['condition'])]
+            if not valid:
+                print(f"⚠️ No valid items for {slot_enum.value}")
                 return {}
+            candidates_map[slot_enum.value] = valid
 
-        # 4. Beam Search Execution
-        # Beam Structure: List of tuples -> (cumulative_score, [list_of_full_item_dicts])
-        
-        # --- Step A: Initialize Beam with First Slot (e.g., Tops) ---
+        # Beam Search
         first_slot_name = slot_names[0]
-        beam = []
+        beam = [[(c['score'], [c['item']]) for c in candidates_map[first_slot_name]]]
+        beam = sorted(beam[0], reverse=True)[:self.BEAM_WIDTH]
         
-        for cand in candidates_map[first_slot_name]:
-            # Initial score is just relevance to the text query
-            beam.append( (cand['score'], [cand['item']]) )
-            
-        # Sort and Keep Top K
-        beam = sorted(beam, key=lambda x: x[0], reverse=True)[:self.BEAM_WIDTH]
-        
-        # --- Step B: Expand Beam through Remaining Slots ---
-        for slot_name in slot_names[1:]: # ["Bottom", "Footwear"]
+        for slot_name in slot_names[1:]:
             next_beam = []
-            
-            for path_score, path_items in beam:
-                last_item = path_items[-1]
-                
-                # Fetch vector for the last item (safely)
-                last_id = last_item['id']
-                if last_id not in self.store.vectors: continue
-                last_vec = self.store.vectors[last_id]
-                
-                # Try every candidate in the current slot
-                for cand in candidates_map[slot_name]:
-                    curr_item = cand['item']
-                    curr_id = curr_item['id']
-                    if curr_id not in self.store.vectors: continue
-                    curr_vec = self.store.vectors[curr_id]
-                    
-                    # 1. Relevance Score (Match to "Date Night")
-                    relevance = cand['score']
-                    
-                    # 2. Compatibility Score (Match to Shirt)
-                    compatibility = NeuroSymbolicEngine.evaluate_pair(
-                        last_item, curr_item, last_vec, curr_vec
-                    )
-                    
-                    # 3. Update Path Score (Weighted Moving Average)
-                    # We weight History slightly higher to maintain coherence
-                    new_score = (path_score * 0.4) + (relevance * 0.3) + (compatibility * 0.3)
-                    
-                    # Add to potential next beam
-                    new_path = path_items + [curr_item]
-                    next_beam.append( (new_score, new_path) )
-            
-            # Prune: Keep only the best K paths overall
+            for score, items in beam:
+                last = items[-1]
+                l_vec = self.store.vectors[last['id']]
+                used_ids = {item['id'] for item in items}  # Track already used items
+                for c in candidates_map[slot_name]:
+                    curr = c['item']
+                    # Skip if this item is already used in the outfit
+                    if curr['id'] in used_ids:
+                        continue
+                    c_vec = self.store.vectors[curr['id']]
+                    compatibility = NeuroSymbolicEngine.evaluate_pair(last, curr, l_vec, c_vec)
+                    new_score = (score * 0.4) + (c['score'] * 0.3) + (compatibility * 0.3)
+                    next_beam.append((new_score, items + [curr]))
             beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:self.BEAM_WIDTH]
 
-        # 5. Output Result
-        if not beam:
-            print("❌ Planning failed. No valid combinations.")
-            return {}
-        
+        if not beam: return {}
         best_score, best_items = beam[0]
-        print(f"✨ Best Outfit (Score: {best_score:.3f})")
+        outfit = {s: i for s, i in zip(slot_names, best_items)}
         
-        outfit_plan = {}
-        for i, slot_name in enumerate(slot_names):
-            item = best_items[i]
-            outfit_plan[slot_name] = item
-            
-            # Debug Print
-            c_name = item['meta'].get('sub_category', 'Item')
-            c_color = item['meta'].get('primary_color', 'Unknown')
-            print(f"   ✅ {slot_name}: {c_name} ({c_color})")
-            
-        return outfit_plan
+        print(f"✨ Outfit Found (Score: {best_score:.3f})")
+        
+        # --- SHOPPING ANALYSIS ---
+        upgrade_msg = self.shopper.find_upgrade(outfit, best_score, q_vec)
+        if upgrade_msg:
+            print(f"💡 SHOPPING INSIGHT: {upgrade_msg}")
+        
+        # Visualization disabled for API usage (uncomment for standalone testing)
+        # Visualizer.show_outfit(outfit, title=f"{user_query} ({weather['condition']})", recommendation=upgrade_msg)
+        return outfit
 
-# --- TEST BLOCK ---
 if __name__ == "__main__":
-    # Ensure this points to your real data directory
-    db = WardrobeStore(data_dir="my_wardrobe/data")
+    db = WardrobeStore(data_dir="my_wardrobe copy/data")
+    planner = ProPlannerV7(store=db)
     
-    # Initialize Planner
-    planner = ProPlanner(store=db)
-    
-    # Run a test
-    planner.plan("Smart casual outfit for a coffee date")
+    # TEST: Ask for a Wedding outfit.
+    # Since you only have Jeans, it should trigger a recommendation for "Navy Wool Trousers"
+    planner.plan("Blue")

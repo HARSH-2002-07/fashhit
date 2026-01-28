@@ -14,7 +14,10 @@
     "pattern": "Abstract",
     "material_appearance": "Cotton",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Regular",
+    "cut": "Long",
+    "occasion_tag": "Gym"
   },
   "embedding": [
     -0.31472888588905334,

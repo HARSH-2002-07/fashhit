@@ -11,7 +11,10 @@
     "pattern": "Logo",
     "material_appearance": "Synthetic",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Relaxed",
+    "cut": "Ankle",
+    "occasion_tag": "Gym"
   },
   "embedding": [
     -0.016101732850074768,

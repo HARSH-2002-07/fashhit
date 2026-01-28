@@ -13,7 +13,10 @@
     "pattern": "Logo",
     "material_appearance": "Cotton",
     "seasonality": "All-Season",
-    "formality": "Casual"
+    "formality": "Casual",
+    "fit": "Relaxed",
+    "cut": "Cropped",
+    "occasion_tag": "Gym"
   },
   "embedding": [
     0.08401541411876678,
