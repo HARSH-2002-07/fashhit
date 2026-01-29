@@ -604,9 +604,9 @@ class ProPlannerV7:
 )
 
         confidence_score = confidence["score"]
-        if confidence_score < CONFIDENCE_THRESHOLDS["minimum"]:
-            print("⚠️ Outfit rejected due to low confidence.")
-            return {}
+        # if confidence_score < CONFIDENCE_THRESHOLDS["minimum"]:
+        #     print("⚠️ Outfit rejected due to low confidence.")
+        #     return {}
         
         explanations = ExplanationEngine.explain(
     outfit=outfit,
