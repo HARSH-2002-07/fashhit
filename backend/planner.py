@@ -23,7 +23,6 @@ CONFIDENCE_THRESHOLDS = {
     "excellent": 0.85
 }
 
-
 CONFIDENCE_WEIGHTS = {
     "silhouette": 0.25,
     "layering": 0.15,
