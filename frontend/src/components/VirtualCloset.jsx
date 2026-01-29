@@ -41,8 +41,8 @@ const VirtualCloset = () => {
           setSavedOutfits(result.data || []);
         }
       } else if (selectedTab === 'All') {
-        // Load all items from all categories
-        const categories = ['tops', 'bottoms', 'shoes', 'outerwear'];
+        // Load all items from all categories (including accessory and one_piece)
+        const categories = ['tops', 'bottoms', 'shoes', 'outerwear', 'accessory', 'one_piece'];
         let allItems = [];
         
         for (const category of categories) {
@@ -55,7 +55,17 @@ const VirtualCloset = () => {
         
         setUploadedItems(allItems);
       } else {
-        const response = await fetch(`${API_URL}/wardrobe/${selectedTab.toLowerCase()}?user_id=${user?.id}`);
+        // Map tab name to API category (handle plural/singular)
+        const categoryMap = {
+          'accessories': 'accessory',
+          'tops': 'tops',
+          'bottoms': 'bottoms',
+          'shoes': 'shoes',
+          'outerwear': 'outerwear'
+        };
+        const apiCategory = categoryMap[selectedTab.toLowerCase()] || selectedTab.toLowerCase();
+        
+        const response = await fetch(`${API_URL}/wardrobe/${apiCategory}?user_id=${user?.id}`);
         const result = await response.json();
         
         if (result.success) {
@@ -112,7 +122,17 @@ const VirtualCloset = () => {
         // Create FormData
         const formData = new FormData();
         formData.append('image', file);
-        formData.append('category', selectedTab.toLowerCase());
+        
+        // Map tab name to API category (handle plural/singular)
+        const categoryMap = {
+          'accessories': 'accessory',
+          'tops': 'tops',
+          'bottoms': 'bottoms',
+          'shoes': 'shoes',
+          'outerwear': 'outerwear'
+        };
+        const uploadCategory = categoryMap[selectedTab.toLowerCase()] || selectedTab.toLowerCase();
+        formData.append('category', uploadCategory);
         formData.append('user_id', user?.id);
         
         // Send to backend API
