@@ -217,6 +217,12 @@ def process_clothing():
             print("💾 Saving to Supabase...")
             user_id = request.form.get('user_id')  # Get user_id from form data
             
+            if not user_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'User ID required'
+                }), 400
+            
             wardrobe_data = {
                 'user_id': user_id,
                 'raw_image_url': raw_url,
@@ -258,10 +264,14 @@ def get_wardrobe_items(category):
     """Get all wardrobe items by category"""
     try:
         user_id = request.args.get('user_id')
-        query = supabase.table('wardrobe_items').select('*').eq('category', category)
         
-        if user_id:
-            query = query.eq('user_id', user_id)
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User ID required'
+            }), 400
+        
+        query = supabase.table('wardrobe_items').select('*').eq('category', category).eq('user_id', user_id)
         
         result = query.order('created_at', desc=True).execute()
         return jsonify({

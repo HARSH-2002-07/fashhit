@@ -46,7 +46,7 @@ const VirtualCloset = () => {
         let allItems = [];
         
         for (const category of categories) {
-          const response = await fetch(`${API_URL}/wardrobe/${category}`);
+          const response = await fetch(`${API_URL}/wardrobe/${category}?user_id=${user?.id}`);
           const result = await response.json();
           if (result.success) {
             allItems = [...allItems, ...(result.data || [])];
@@ -55,7 +55,7 @@ const VirtualCloset = () => {
         
         setUploadedItems(allItems);
       } else {
-        const response = await fetch(`${API_URL}/wardrobe/${selectedTab.toLowerCase()}`);
+        const response = await fetch(`${API_URL}/wardrobe/${selectedTab.toLowerCase()}?user_id=${user?.id}`);
         const result = await response.json();
         
         if (result.success) {
@@ -113,6 +113,7 @@ const VirtualCloset = () => {
         const formData = new FormData();
         formData.append('image', file);
         formData.append('category', selectedTab.toLowerCase());
+        formData.append('user_id', user?.id);
         
         // Send to backend API
         const response = await fetch(`${API_URL}/process-clothing`, {
