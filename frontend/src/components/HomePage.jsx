@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Calendar, Sparkles } from 'lucide-react';
+import { Search, ShoppingBag, User, Upload, Cloud, CloudRain } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
@@ -9,6 +9,7 @@ const HomePage = () => {
   const location = useLocation();
   const { user } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [weather, setWeather] = useState({ temp: '18', condition: 'Cloudy', location: 'London' });
   
   // Open auth modal if redirected from protected route
   useEffect(() => {
@@ -25,83 +26,228 @@ const HomePage = () => {
     }
   };
 
+  const handleWatchDemo = () => {
+    // Placeholder for demo functionality
+    console.log('Watch Demo clicked');
+  };
+
+  // Mock outfit of the day
+  const outfitOfDay = [
+    { id: 1, name: 'Black Blazer', image: '/images/outfit/blazer.png' },
+    { id: 2, name: 'Black Vest', image: '/images/outfit/vest.png' },
+    { id: 3, name: 'Black Pants', image: '/images/outfit/pants.png' }
+  ];
+
+  // Mock shopping upgrades
+  const shoppingUpgrades = [
+    { id: 1, name: 'Navy Blazer', price: '$38.00', description: 'Matches your Navy Blazer', image: '/images/shop/navy-blazer.png' },
+    { id: 2, name: 'Complete Look', price: '$79.00', description: 'Completes your look', image: '/images/shop/complete-1.png' },
+    { id: 3, name: 'Complete Look', price: '$43.00', description: 'Completes your look', image: '/images/shop/complete-2.png' },
+    { id: 4, name: 'Complete Look', price: '$58.00', description: 'Completes your look', image: '/images/shop/complete-3.png' },
+    { id: 5, name: 'Navy Sweater', price: '$36.00', description: 'Matches your Navy Sweater', image: '/images/shop/navy-sweater.png' }
+  ];
+
+  const weekDays = [
+    { day: 'Mon', date: '26', high: '18°', low: '12°' },
+    { day: 'Tue', date: '27', high: '19°', low: '13°' },
+    { day: 'Wed', date: '28', high: '18°', low: '12°' },
+    { day: 'Thu', date: '29', high: '18°', low: '13°' },
+    { day: 'Fri', date: '30', high: '19°', low: '13°' }
+  ];
+
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
-        <div className="flex items-center space-x-2">
-          <Sparkles className="w-6 h-6 text-blue-500" />
-          <span className="text-xl font-semibold text-gray-800">AiStylist</span>
-        </div>
-        
-        <div className="hidden md:flex items-center space-x-8">
-          <a href="#how-it-works" className="text-gray-600 hover:text-gray-900 transition">
-            How It Works
-          </a>
-          <a href="#about" className="text-gray-600 hover:text-gray-900 transition">
-            About
-          </a>
-          <a href="#blog" className="text-gray-600 hover:text-gray-900 transition">
-            Blog
-          </a>
-        </div>
-
-        {user ? (
-          <button 
-            onClick={() => navigate('/closet')}
-            className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <span>Go to Closet</span>
-          </button>
-        ) : (
-          <button 
-            onClick={() => setIsAuthModalOpen(true)}
-            className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <span>Sign In</span>
-          </button>
-        )}
-      </nav>
-
-      {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-8 py-16 md:py-24">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
-              Your Personal AI<br />Stylist is Here.
-            </h1>
-            <p className="text-lg text-gray-600 mb-8">
-              Upload your wardrobe, get perfect outfit suggestions instantly.
-            </p>
-            <button 
-              onClick={handleGetStarted}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-full text-lg font-medium transition shadow-lg hover:shadow-xl"
-            >
-              Get Started - Build Your Closet
-            </button>
+      {/* Header with Hero */}
+      <div className="relative bg-gradient-to-br from-gray-400 via-gray-500 to-gray-600 overflow-hidden">
+        {/* Navigation */}
+        <nav className="relative z-10 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
+          <div className="flex items-center space-x-2">
+            <span className="text-2xl font-light text-white tracking-wider">FASHION AI</span>
           </div>
           
-          <div className="relative">
-            <div className="bg-gray-200 rounded-lg overflow-hidden aspect-square">
-              {/* Placeholder for the person image */}
-              <img 
-                src="/images/styled-person.png" 
-                alt="Styled person" 
-                className="w-full h-full object-cover"
-              />
+          <div className="hidden md:flex items-center space-x-8">
+            <a href="#home" className="text-white hover:text-gray-200 transition">
+              Home
+            </a>
+            <a href="#wardrobe" className="text-white hover:text-gray-200 transition" onClick={(e) => { e.preventDefault(); navigate('/closet'); }}>
+              Wardrobe
+            </a>
+            <a href="#planner" className="text-white hover:text-gray-200 transition" onClick={(e) => { e.preventDefault(); navigate('/outfit'); }}>
+              Planner
+            </a>
+            <a href="#shop" className="text-white hover:text-gray-200 transition">
+              Shop
+            </a>
+          </div>
+
+          <div className="flex items-center space-x-6">
+            <button className="text-white hover:text-gray-200 transition">
+              <Search className="w-5 h-5" />
+            </button>
+            <button className="text-white hover:text-gray-200 transition">
+              <ShoppingBag className="w-5 h-5" />
+            </button>
+            {user ? (
+              <button 
+                onClick={() => navigate('/closet')}
+                className="text-white hover:text-gray-200 transition"
+              >
+                <User className="w-5 h-5" />
+              </button>
+            ) : (
+              <button 
+                onClick={() => setIsAuthModalOpen(true)}
+                className="text-white hover:text-gray-200 transition"
+              >
+                <User className="w-5 h-5" />
+              </button>
+            )}
+            <button 
+              onClick={handleGetStarted}
+              className="bg-white text-gray-800 px-4 py-2 rounded hover:bg-gray-100 transition"
+            >
+              Upload
+            </button>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <section className="relative z-10 max-w-7xl mx-auto px-8 py-20 md:py-32">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-6">
+                YOUR DIGITAL CLOSET,<br />ELEVATED BY AI
+              </h1>
+              <p className="text-xl text-gray-100 mb-8">
+                Curate, plan, and discover your perfect look instantly.
+              </p>
+              <div className="flex space-x-4">
+                <button 
+                  onClick={handleGetStarted}
+                  className="bg-white text-gray-800 px-8 py-3 rounded font-medium hover:bg-gray-100 transition"
+                >
+                  GET STARTED
+                </button>
+                <button 
+                  onClick={handleWatchDemo}
+                  className="bg-gray-700 text-white px-8 py-3 rounded font-medium hover:bg-gray-600 transition"
+                >
+                  WATCH DEMO
+                </button>
+              </div>
+            </div>
+            
+            {/* Hero Images Grid - Diverse models */}
+            <div className="hidden md:grid grid-cols-3 gap-2">
+              <div className="space-y-2">
+                <div className="bg-gray-700 rounded-lg h-48 overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-b from-gray-600 to-gray-700"></div>
+                </div>
+                <div className="bg-gray-700 rounded-lg h-32 overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-b from-gray-600 to-gray-700"></div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="bg-gray-700 rounded-lg h-32 overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-b from-gray-600 to-gray-700"></div>
+                </div>
+                <div className="bg-gray-700 rounded-lg h-48 overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-b from-gray-600 to-gray-700"></div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="bg-gray-700 rounded-lg h-48 overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-b from-gray-600 to-gray-700"></div>
+                </div>
+                <div className="bg-gray-700 rounded-lg h-32 overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-b from-gray-600 to-gray-700"></div>
+                </div>
+              </div>
             </div>
           </div>
+        </section>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-8 py-12 bg-white">
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* AI Outfit of the Day */}
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">AI OUTFIT OF THE DAY</h2>
+            
+            {/* Weather Widget */}
+            <div className="bg-gray-100 rounded-lg p-6 mb-6">
+              <div className="flex items-center space-x-2 mb-4">
+                <Cloud className="w-5 h-5 text-gray-600" />
+                <span className="text-base font-medium text-gray-700">{weather.location}, {weather.temp}°C</span>
+              </div>
+              <div className="text-sm text-gray-600 mb-4">{weather.condition}</div>
+              
+              {/* Week Forecast */}
+              <div className="grid grid-cols-5 gap-3 text-center text-sm">
+                {weekDays.map((day, idx) => (
+                  <div key={idx}>
+                    <div className="text-gray-700 font-medium mb-1">{day.day}</div>
+                    <div className="text-gray-500 text-xs mb-2">{day.date}</div>
+                    <Cloud className="w-5 h-5 mx-auto mb-2 text-gray-400" />
+                    <div className="text-gray-900 font-semibold">{day.high}</div>
+                    <div className="text-gray-500 text-xs">{day.low}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Outfit Items */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              {outfitOfDay.map((item) => (
+                <div key={item.id} className="bg-gray-100 rounded-lg p-6 aspect-[3/4] flex items-center justify-center">
+                  <span className="text-gray-500 text-sm text-center">{item.name}</span>
+                </div>
+              ))}
+            </div>
+
+            <button className="w-full bg-gray-900 text-white py-4 rounded-lg font-semibold text-base hover:bg-gray-800 transition">
+              Wear This
+            </button>
+          </div>
+
+          {/* Smart Shopping Upgrades */}
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">SMART SHOPPING UPGRADES</h2>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {shoppingUpgrades.slice(0, 4).map((item) => (
+                <div key={item.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition">
+                  <div className="aspect-[3/4] bg-gray-100 flex items-center justify-center">
+                    <span className="text-gray-400 text-sm">{item.name}</span>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+                    <p className="text-xl font-bold text-gray-900">{item.price}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {shoppingUpgrades.length > 4 && (
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition">
+                <div className="flex gap-4 p-4">
+                  <div className="w-32 h-40 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-gray-400 text-sm text-center">{shoppingUpgrades[4].name}</span>
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <p className="text-sm text-gray-600 mb-2">{shoppingUpgrades[4].description}</p>
+                    <p className="text-xl font-bold text-gray-900">{shoppingUpgrades[4].price}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </section>
+      </div>
 
       {/* How it Works Section */}
-      <section id="how-it-works" className="bg-gray-50 py-20">
+      <section className="bg-gray-50 py-20">
         <div className="max-w-7xl mx-auto px-8">
           <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
             How it Works
@@ -124,7 +270,9 @@ const HomePage = () => {
             {/* Step 2 */}
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full shadow-md mb-6">
-                <Sparkles className="w-8 h-8 text-gray-700" />
+                <svg className="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 2. Get Daily Recommendations
@@ -137,7 +285,9 @@ const HomePage = () => {
             {/* Step 3 */}
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full shadow-md mb-6">
-                <Calendar className="w-8 h-8 text-gray-700" />
+                <svg className="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-3">
                 3. Plan Your Looks
@@ -151,95 +301,54 @@ const HomePage = () => {
       </section>
 
       {/* Why Choose Us Section */}
-      <section className="py-20">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-8">
           <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
             Why Choose Us
           </h2>
           
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-green-500 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Save Time Every Morning
-                </h3>
+          <div className="grid md:grid-cols-3 gap-12 max-w-5xl mx-auto">
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               </div>
+              <h3 className="text-xl font-semibold text-gray-900">
+                Save Time Every Morning
+              </h3>
             </div>
 
-            <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-green-500 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Discover New Combinations
-                </h3>
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               </div>
+              <h3 className="text-xl font-semibold text-gray-900">
+                Discover New Combinations
+              </h3>
             </div>
 
-            <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-green-500 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Always Look Your Best
-                </h3>
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               </div>
+              <h3 className="text-xl font-semibold text-gray-900">
+                Always Look Your Best
+              </h3>
             </div>
           </div>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-50 py-8 border-t border-gray-200">
-        <div className="max-w-7xl mx-auto px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="flex space-x-6 text-sm text-gray-600">
-              <a href="#terms" className="hover:text-gray-900 transition">
-                Terms of Service
-              </a>
-              <a href="#privacy" className="hover:text-gray-900 transition">
-                Privacy Policy
-              </a>
-              <a href="#contact" className="hover:text-gray-900 transition">
-                Contact
-              </a>
-            </div>
-
-            <div className="flex space-x-4">
-              <a href="#facebook" className="text-gray-400 hover:text-gray-600 transition">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
-              </a>
-              <a href="#twitter" className="text-gray-400 hover:text-gray-600 transition">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
-                </svg>
-              </a>
-              <a href="#youtube" className="text-gray-400 hover:text-gray-600 transition">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                </svg>
-              </a>
-            </div>
-
-            <div className="text-sm text-gray-600">
-              © 2026 AiStylist Inc.
-            </div>
 
       {/* Auth Modal */}
       <AuthModal 
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)} 
       />
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
