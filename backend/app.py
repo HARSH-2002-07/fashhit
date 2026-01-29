@@ -174,17 +174,26 @@ def process_clothing():
             gemini_attributes = {}
             if has_json_processor and gemini_model:
                 try:
-                    gemini_attributes = get_tags_with_retry(clean_pil_for_analysis, gemini_model)
+                    gemini_attributes = get_tags_with_retry(clean_pil_for_analysis)
                 except Exception as e:
                     print(f"⚠️ Gemini tagging failed: {e}")
-                    # Provide default attributes
+                    # Provide default attributes matching ClothingMetadata structure
                     gemini_attributes = {
                         'category': category.capitalize(),
                         'sub_category': 'Unknown',
                         'primary_color': 'Black',
+                        'secondary_color': None,
                         'pattern': 'Solid',
+                        'material': 'Cotton',
+                        'seasonality': ['All-Season'],
                         'formality': 'Casual',
-                        'seasonality': 'All-Season'
+                        'fit': 'Regular',
+                        'occasion': ['Everyday'],
+                        'style_tags': ['Classic'],
+                        'layer_role': 'Base',
+                        'silhouette_volume': 'Regular',
+                        'pairing_bias': 0.5,
+                        'length_profile': 'Standard'
                     }
             
             # Generate FashionCLIP embedding (512 dimensions)
@@ -354,13 +363,16 @@ def save_outfit():
                 'error': 'User ID required'
             }), 400
         
-        # Prepare outfit data
+        # Prepare outfit data with all 6 categories
         outfit_data = {
             'user_id': user_id,
             'occasion': occasion,
             'top_id': outfit.get('tops', {}).get('id') if outfit.get('tops') else None,
             'bottom_id': outfit.get('bottoms', {}).get('id') if outfit.get('bottoms') else None,
             'shoes_id': outfit.get('shoes', {}).get('id') if outfit.get('shoes') else None,
+            'outerwear_id': outfit.get('outerwear', {}).get('id') if outfit.get('outerwear') else None,
+            'one_piece_id': outfit.get('one_piece', {}).get('id') if outfit.get('one_piece') else None,
+            'accessory_id': outfit.get('accessory', {}).get('id') if outfit.get('accessory') else None,
             'created_at': data.get('created_at')
         }
         
@@ -399,7 +411,7 @@ def get_saved_outfits():
         # Get saved outfits
         outfits_result = supabase.table('saved_outfits').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
         
-        # Enrich with wardrobe item details
+        # Enrich with wardrobe item details for all 6 categories
         enriched_outfits = []
         for outfit in outfits_result.data:
             enriched = {
@@ -408,7 +420,10 @@ def get_saved_outfits():
                 'created_at': outfit['created_at'],
                 'top': None,
                 'bottom': None,
-                'shoes': None
+                'shoes': None,
+                'outerwear': None,
+                'one_piece': None,
+                'accessory': None
             }
             
             # Fetch top details
@@ -428,6 +443,24 @@ def get_saved_outfits():
                 shoes_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['shoes_id']).execute()
                 if shoes_result.data:
                     enriched['shoes'] = shoes_result.data[0]
+            
+            # Fetch outerwear details
+            if outfit.get('outerwear_id'):
+                outerwear_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['outerwear_id']).execute()
+                if outerwear_result.data:
+                    enriched['outerwear'] = outerwear_result.data[0]
+            
+            # Fetch one_piece details
+            if outfit.get('one_piece_id'):
+                one_piece_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['one_piece_id']).execute()
+                if one_piece_result.data:
+                    enriched['one_piece'] = one_piece_result.data[0]
+            
+            # Fetch accessory details
+            if outfit.get('accessory_id'):
+                accessory_result = supabase.table('wardrobe_items').select('*').eq('id', outfit['accessory_id']).execute()
+                if accessory_result.data:
+                    enriched['accessory'] = accessory_result.data[0]
             
             enriched_outfits.append(enriched)
         
@@ -520,7 +553,9 @@ def recommend_outfit():
                     'tops': 'Top',
                     'bottoms': 'Bottom',
                     'shoes': 'Footwear',
-                    'outerwear': 'Outerwear'
+                    'outerwear': 'Outerwear',
+                    'one_piece': 'One-Piece',
+                    'accessory': 'Accessory'
                 }
                 
                 has_embeddings = False
@@ -533,18 +568,25 @@ def recommend_outfit():
                     if attributes.get('category', '').lower() == 'outerwear':
                         item_category = 'outerwear'
                     
-                    # Transform database format to planner format
+                    # Transform database format to planner format with all new fields
                     planner_item = {
                         'id': item['id'],
                         'meta': {
                             'category': category_map.get(item_category, 'Top'),
                             'sub_category': attributes.get('sub_category', 'Unknown'),
                             'primary_color': attributes.get('primary_color', 'Black'),
+                            'secondary_color': attributes.get('secondary_color'),
                             'formality': attributes.get('formality', 'Casual'),
                             'pattern': attributes.get('pattern', 'Solid'),
                             'fit': attributes.get('fit', 'Regular'),
                             'material': attributes.get('material', 'Cotton'),
-                            'seasonality': attributes.get('seasonality', 'All-Season'),
+                            'seasonality': attributes.get('seasonality', ['All-Season']),
+                            'occasion': attributes.get('occasion', ['Everyday']),
+                            'style_tags': attributes.get('style_tags', []),
+                            'layer_role': attributes.get('layer_role', 'Base'),
+                            'silhouette_volume': attributes.get('silhouette_volume', 'Regular'),
+                            'pairing_bias': attributes.get('pairing_bias', 0.5),
+                            'length_profile': attributes.get('length_profile', 'Standard')
                         },
                         'paths': {
                             'raw': item['raw_image_url'],
@@ -573,21 +615,25 @@ def recommend_outfit():
                 planner = ProPlannerV7(store=store)
                 
                 # Generate outfit using neuro-symbolic reasoning with shopping
-                outfit_plan = planner.plan(user_query=user_query, manual_weather=manual_weather)
-                
-                # Get shopping recommendation if available
-                shopping_tip = None
-                if hasattr(planner, 'shopper') and planner.shopper:
-                    from fashion_clip.fashion_clip import FashionCLIP
-                    fclip_temp = FashionCLIP('fashion-clip')
-                    q_vec = fclip_temp.encode_text([user_query], batch_size=1)[0]
-                    
-                    # Calculate outfit score (simplified)
-                    outfit_score = 0.7  # Placeholder
-                    shopping_tip = planner.shopper.find_upgrade(outfit_plan, outfit_score, q_vec)
+                planner_result = planner.plan(user_query=user_query, manual_weather=manual_weather)
                 
                 # Clean up temporary directory
                 shutil.rmtree(temp_dir, ignore_errors=True)
+                
+                # Extract result (handle both old dict format and new metadata format)
+                if isinstance(planner_result, dict) and 'outfit' in planner_result:
+                    outfit_plan = planner_result['outfit']
+                    confidence_data = planner_result.get('confidence', {})
+                    weather_info = planner_result.get('weather', {})
+                    shopping_tip = planner_result.get('shopping_tip')
+                    template_used = planner_result.get('template', 'unknown')
+                else:
+                    # Old format - just outfit dict
+                    outfit_plan = planner_result
+                    confidence_data = {}
+                    weather_info = {}
+                    shopping_tip = None
+                    template_used = 'unknown'
                 
                 if not outfit_plan:
                     raise Exception("Planner could not generate a valid outfit combination")
@@ -597,7 +643,9 @@ def recommend_outfit():
                     'Top': 'tops',
                     'Bottom': 'bottoms',
                     'Footwear': 'shoes',
-                    'Outerwear': 'outerwear'
+                    'Outerwear': 'outerwear',
+                    'One-Piece': 'one_piece',
+                    'Accessory': 'accessory'
                 }
                 
                 outfit_response = {}
@@ -620,11 +668,16 @@ def recommend_outfit():
                 
                 print(f"✅ Outfit generated using ProPlannerV7 with shopping engine")
                 
-                # Get weather info
-                from planner import LiveWeather
-                weather_info = LiveWeather.get_weather()
-                if manual_weather:
-                    weather_info['condition'] = manual_weather
+                # If weather_info is empty, get it from LiveWeather
+                if not weather_info:
+                    from planner import LiveWeather
+                    weather_info = LiveWeather.get_weather()
+                    if manual_weather:
+                        weather_info['condition'] = manual_weather
+                
+                # Extract confidence score
+                confidence_score = confidence_data.get('score', 0.0)
+                confidence_percentage = int(confidence_score * 100)
                 
                 return jsonify({
                     'success': True,
@@ -632,7 +685,13 @@ def recommend_outfit():
                     'query': user_query,
                     'method': 'ProPlannerV7',
                     'shopping_tip': shopping_tip,
-                    'weather': weather_info
+                    'weather': weather_info,
+                    'confidence': {
+                        'score': confidence_score,
+                        'percentage': confidence_percentage,
+                        'breakdown': confidence_data.get('breakdown', {})
+                    },
+                    'template': template_used
                 }), 200
                 
             except Exception as planner_error:

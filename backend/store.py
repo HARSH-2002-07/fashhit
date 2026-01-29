@@ -67,8 +67,15 @@ class WardrobeStore:
             # Filter by category if requested
             if category_filter:
                 item_cat = self.items[item_id]["meta"].get("category")
-                if item_cat != category_filter.value:
+                filter_cat = (
+                    category_filter.value
+                    if hasattr(category_filter, "value")
+                    else category_filter
+                )
+
+                if item_cat != filter_cat:
                     continue
+
 
             # Cosine Similarity Formula: (A . B) / (||A|| * ||B||)
             similarity = np.dot(query_vec, item_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(item_vec))

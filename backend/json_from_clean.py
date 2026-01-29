@@ -6,10 +6,7 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import concurrent.futures
 from PIL import Image
-try:
-    from google import genai
-except ImportError:
-    import google.generativeai as genai
+import google.generativeai as genai
 from fashion_clip.fashion_clip import FashionCLIP
 from tqdm import tqdm
 import hashlib
@@ -28,10 +25,11 @@ if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 
+
 # --- CONFIGURATION ---
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # Load from .env file
-CLEAN_IMAGES_DIR = Path("new_clean_data/images")
-JSON_OUTPUT_DIR = Path("new_clean_data/json")
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # ⚠️ REPLACE ME
+CLEAN_IMAGES_DIR = Path("Ideal Wardrobe/data/images")
+JSON_OUTPUT_DIR = Path("Ideal Wardrobe/data/json")
 
 # Model selection - gemini-2.5-flash-lite is BEST for free tier (10 RPM vs 5 RPM)
 # ┌────────────────────────┬──────┬─────────────────────┐
@@ -41,7 +39,7 @@ JSON_OUTPUT_DIR = Path("new_clean_data/json")
 # │ gemini-2.5-flash       │   5  │ ~7.4 min (34 items) │
 # │ gemini-3-flash         │   5  │ ~7.4 min (34 items) │
 # └────────────────────────┴──────┴─────────────────────┘
-GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_MODEL = "gemini-2.5-flash"
 REQUESTS_PER_MINUTE = 10
 
 MAX_WORKERS = 3  # Optimal for 10 RPM
@@ -69,11 +67,16 @@ class ClothingMetadata:
     secondary_color: Optional[str]
     pattern: str
     material: Optional[str]
-    seasonality: str
+    seasonality: List[str]
     formality: str
     fit: Optional[str]
     occasion: List[str]
     style_tags: List[str]
+    layer_role: str
+    silhouette_volume: str
+    pairing_bias: float
+    length_profile: str
+
 
 @dataclass
 class WardrobeItem:
@@ -145,15 +148,10 @@ def rate_limited_api_call():
     retry=retry_if_exception_type((Exception,)),
     reraise=True
 )
-def get_tags_with_retry(pil_image: Image.Image, model_instance=None) -> Dict:
+def get_tags_with_retry(pil_image: Image.Image) -> Dict:
     """
     Enhanced tagging with retry logic and comprehensive schema.
     """
-    # Use provided model or global model
-    gemini_model = model_instance if model_instance is not None else model
-    if gemini_model is None:
-        raise ValueError("No Gemini model provided or initialized")
-    
     prompt = """
 You are a professional fashion analyst AI. Analyze this clothing item with precision.
 
@@ -170,7 +168,8 @@ Return ONLY a JSON object (no markdown, no explanation) using this EXACT schema:
   "formality": "<Casual|Smart Casual|Business Casual|Formal|Athletic|Lounge>",
   "fit": "<Slim|Regular|Loose|Oversized|Relaxed|Athletic>",
   "occasion": ["<Everyday|Work|Sport|Party|Outdoor|Formal Event|Date|Travel>"],
-  "style_tags": ["<Streetwear|Minimalist|Vintage|Athletic|Preppy|Urban|Bohemian|Classic|Modern|Techwear>"]
+  "style_tags": ["<Streetwear|Minimalist|Vintage|Athletic|Preppy|Urban|Bohemian|Classic|Modern|Techwear>",
+  ]
 }
 
 CRITICAL RULES:
@@ -186,7 +185,7 @@ CRITICAL RULES:
         # Rate limit before making API call
         rate_limited_api_call()
         
-        response = gemini_model.generate_content([prompt, pil_image])
+        response = model.generate_content([prompt, pil_image])
         parsed = json.loads(response.text)
         
         # Validate required fields
@@ -207,20 +206,15 @@ CRITICAL RULES:
         logger.error(f"Tagging error: {e}")
         raise
 
-def process_image_batch(image_paths: List[Path], fclip_instance=None) -> List[List[float]]:
+def process_image_batch(image_paths: List[Path]) -> List[List[float]]:
     """
     Process multiple images through FashionCLIP in a single batch.
     """
-    # Use provided fclip or global fclip
-    fashion_clip_model = fclip_instance if fclip_instance is not None else fclip
-    if fashion_clip_model is None:
-        raise ValueError("No FashionCLIP model provided or initialized")
-    
     try:
         # Convert Path objects to strings, ensure they're absolute paths
         str_paths = [str(p.resolve()) for p in image_paths]
         
-        embeddings = fashion_clip_model.encode_images(
+        embeddings = fclip.encode_images(
             str_paths,
             batch_size=BATCH_SIZE
         )
@@ -283,18 +277,32 @@ def process_single_item(args: tuple) -> Optional[Dict]:
         
         # Convert to structured metadata
         metadata = ClothingMetadata(
-            category=tags_dict['category'],
-            sub_category=tags_dict['sub_category'],
-            primary_color=tags_dict['primary_color'],
-            secondary_color=tags_dict.get('secondary_color'),
-            pattern=tags_dict['pattern'],
-            material=tags_dict.get('material'),
-            seasonality=tags_dict['seasonality'],
-            formality=tags_dict['formality'],
-            fit=tags_dict.get('fit'),
-            occasion=tags_dict.get('occasion', []),
-            style_tags=tags_dict.get('style_tags', [])
-        )
+    category=normalize_category(tags_dict['category']),
+    sub_category=tags_dict['sub_category'],
+    primary_color=tags_dict['primary_color'],
+    secondary_color=tags_dict.get('secondary_color'),
+    pattern=tags_dict['pattern'],
+    material=tags_dict.get('material'),
+    seasonality=normalize_season(tags_dict['seasonality']),
+    formality=normalize_formality(tags_dict['formality']),
+    fit=tags_dict.get('fit'),
+    occasion=tags_dict.get('occasion', []),
+    style_tags=tags_dict.get('style_tags', []),
+
+    # 👇 ADD THESE THREE LINES
+    length_profile="Standard",
+    layer_role=infer_layer_role(
+        normalize_category(tags_dict['category']),
+        tags_dict['sub_category']
+    ),
+    silhouette_volume=map_volume(tags_dict.get('fit')),
+    pairing_bias=pairing_bias({
+        "primary_color": tags_dict['primary_color'],
+        "pattern": tags_dict['pattern'],
+        "formality": normalize_formality(tags_dict['formality'])
+    })
+)
+
         
         # Get embedding from cache or compute
         if base_name in embeddings_cache:
@@ -359,6 +367,58 @@ def batch_process_embeddings(files_to_process: List[Path]) -> Dict[str, List[flo
                     logger.error(f"Failed individual embedding for {path.name}: {e2}")
     
     return embeddings_map
+
+def normalize_category(raw: str) -> str:
+    mapping = {
+        "Dress": "One-Piece",
+        "Suit": "One-Piece",
+        "Top": "Top",
+        "Bottom": "Bottom",
+        "Footwear": "Footwear",
+        "Outerwear": "Outerwear",
+        "Accessory": "Accessory"
+    }
+    return mapping.get(raw, "Top")  # Safe fallback
+
+def normalize_formality(raw: str) -> str:
+    if raw in ["Business Casual", "Smart Casual"]:
+        return "Smart Casual"
+    if raw in ["Athletic", "Lounge"]:
+        return "Lounge"
+    return raw
+
+def normalize_season(raw: str) -> List[str]:
+    if raw == "All-Season":
+        return ["Summer", "Spring", "Fall", "Winter"]
+    return [raw]
+
+def infer_layer_role(category, sub_category):
+    sc = sub_category.lower()
+    if category == "Outerwear":
+        return "Outer"
+    if any(x in sc for x in ["hoodie", "sweater", "cardigan"]):
+        return "Mid"
+    if category == "Top":
+        return "Base"
+    return "None"
+
+def map_volume(fit):
+    if fit in ["Oversized", "Relaxed", "Loose"]:
+        return "Wide"
+    if fit in ["Slim", "Skinny"]:
+        return "Narrow"
+    return "Regular"
+
+def pairing_bias(meta):
+    score = 0.0
+    if meta['primary_color'] in ["Black", "White", "Navy", "Grey"]:
+        score += 0.2
+    if meta.get('pattern') == "Solid":
+        score += 0.2
+    if meta.get('formality') == "Formal":
+        score -= 0.1  # Less flexible
+    return score
+
 
 def generate_wardrobe_summary(json_dir: Path) -> Dict:
     """Generate analytics summary of the wardrobe."""

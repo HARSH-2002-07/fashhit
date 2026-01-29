@@ -22,6 +22,8 @@ const OutfitRecommendation = () => {
   const [shoppingTip, setShoppingTip] = useState(null);
   const [weather, setWeather] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [confidence, setConfidence] = useState(null);
+  const [template, setTemplate] = useState(null);
 
   // --- Logic Handlers ---
   const handleRecommend = async () => {
@@ -39,9 +41,12 @@ const OutfitRecommendation = () => {
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || 'Failed to generate');
 
+      console.log('API Response:', result); // Debug
       setCurrentOutfit(result.outfit);
       setShoppingTip(result.shopping_tip);
       setWeather(result.weather);
+      setConfidence(result.confidence);
+      setTemplate(result.template);
       setHasOutfit(true);
     } catch (error) {
       console.error('Error:', error);
@@ -241,57 +246,135 @@ const OutfitRecommendation = () => {
               </div>
             </div>
 
-            {/* Bento Grid Layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-[600px]">
+            {/* Bento Grid Layout - Adaptive for outfit type */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 min-h-[600px]">
               
-              {/* Col 1: Outerwear & Top (Stacked) */}
-              <div className="lg:col-span-1 flex flex-col gap-6 h-full">
-                {/* Outerwear */}
-                <ItemCard 
-                  item={currentOutfit?.outerwear} 
-                  label="Outerwear" 
-                  fallbackIcon={<Shirt />}
-                  className="flex-1"
-                />
-                {/* Top */}
-                <ItemCard 
-                  item={currentOutfit?.tops} 
-                  label="Top" 
-                  fallbackIcon={<Shirt />}
-                  className="flex-1"
-                />
-              </div>
-
-              {/* Col 2: Bottoms (Tall Hero) */}
-              <div className="lg:col-span-2 h-full">
-                <ItemCard 
-                  item={currentOutfit?.bottoms} 
-                  label="Bottoms" 
-                  fallbackIcon={<Shirt />}
-                  className="h-full"
-                  isHero={true}
-                />
-              </div>
-
-              {/* Col 3: Shoes (Standard) */}
-              <div className="lg:col-span-1 flex flex-col gap-6 h-full">
-                <ItemCard 
-                  item={currentOutfit?.shoes} 
-                  label="Footwear" 
-                  fallbackIcon={<ShoppingBag />}
-                  className="h-1/2"
-                />
-                
-                {/* Decorative / Info Block */}
-                <div className="h-1/2 bg-slate-900 rounded-3xl p-6 flex flex-col justify-between text-slate-300">
-                  <Sparkles className="w-8 h-8 text-yellow-400" />
-                  <div>
-                    <p className="text-xs uppercase tracking-widest font-bold mb-1 opacity-50">Confidence Score</p>
-                    <p className="text-3xl font-bold text-white">98%</p>
-                    <p className="text-xs mt-2 text-slate-400">Perfectly matched for weather & style.</p>
+              {/* Check if one-piece outfit */}
+              {currentOutfit?.one_piece ? (
+                /* One-Piece Layout */
+                <>
+                  {/* Col 1-2: One-Piece (Hero) */}
+                  <div className="lg:col-span-2 h-full min-h-[600px]">
+                    <ItemCard 
+                      item={currentOutfit?.one_piece} 
+                      label="One-Piece" 
+                      fallbackIcon={<Shirt />}
+                      className="h-full"
+                      isHero={true}
+                    />
                   </div>
-                </div>
-              </div>
+
+                  {/* Col 3: Footwear & Accessory */}
+                  <div className="lg:col-span-1 flex flex-col gap-6 h-full min-h-[600px]">
+                    <ItemCard 
+                      item={currentOutfit?.shoes} 
+                      label="Footwear" 
+                      fallbackIcon={<ShoppingBag />}
+                      className="flex-1"
+                    />
+                    {currentOutfit?.accessory && (
+                      <ItemCard 
+                        item={currentOutfit?.accessory} 
+                        label="Accessory" 
+                        fallbackIcon={<Sparkles />}
+                        className="flex-1"
+                      />
+                    )}
+                  </div>
+
+                  {/* Col 4: Info Block */}
+                  <div className="lg:col-span-1 flex flex-col gap-6 h-full min-h-[600px]">
+                    {/* Confidence & Info Block - moved here */}
+                    <div className="flex-1 bg-slate-900 rounded-3xl p-6 flex flex-col justify-between text-slate-300">
+                      <Sparkles className="w-8 h-8 text-yellow-400" />
+                      <div>
+                        <p className="text-xs uppercase tracking-widest font-bold mb-1 opacity-50">Confidence Score</p>
+                        <p className="text-3xl font-bold text-white">
+                          {confidence?.percentage || 0}%
+                        </p>
+                        <p className="text-xs mt-2 text-slate-400">
+                          {confidence?.percentage >= 85 ? 'Perfectly matched' : 
+                           confidence?.percentage >= 70 ? 'Great combination' : 
+                           confidence?.percentage >= 55 ? 'Good pairing' : 'Basic match'}
+                          {template && ` • ${template} style`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Standard Layout */
+                <>
+                  {/* Col 1: Outerwear/Accessory & Top (Stacked) */}
+                  <div className="lg:col-span-1 flex flex-col gap-6 h-full min-h-[600px]">
+                    {/* Show Outerwear or Accessory */}
+                    {currentOutfit?.outerwear ? (
+                      <ItemCard 
+                        item={currentOutfit?.outerwear} 
+                        label="Outerwear" 
+                        fallbackIcon={<Shirt />}
+                        className="flex-1"
+                      />
+                    ) : currentOutfit?.accessory ? (
+                      <ItemCard 
+                        item={currentOutfit?.accessory} 
+                        label="Accessory" 
+                        fallbackIcon={<Sparkles />}
+                        className="flex-1"
+                      />
+                    ) : (
+                      <div className="flex-1 bg-white/50 rounded-3xl border border-dashed border-slate-200 flex items-center justify-center text-slate-300">
+                        <Shirt className="w-8 h-8" />
+                      </div>
+                    )}
+                    {/* Top */}
+                    <ItemCard 
+                      item={currentOutfit?.tops} 
+                      label="Top" 
+                      fallbackIcon={<Shirt />}
+                      className="flex-1"
+                    />
+                  </div>
+
+                  {/* Col 2-3: Bottoms (Tall Hero) */}
+                  <div className="lg:col-span-2 h-full min-h-[600px]">
+                    <ItemCard 
+                      item={currentOutfit?.bottoms} 
+                      label="Bottoms" 
+                      fallbackIcon={<Shirt />}
+                      className="h-full"
+                      isHero={true}
+                    />
+                  </div>
+
+                  {/* Col 4: Shoes & Info */}
+                  <div className="lg:col-span-1 flex flex-col gap-6 h-full min-h-[600px]">
+                    <ItemCard 
+                      item={currentOutfit?.shoes} 
+                      label="Footwear" 
+                      fallbackIcon={<ShoppingBag />}
+                      className="h-1/2"
+                    />
+                    
+                    {/* Confidence & Info Block */}
+                    <div className="h-1/2 bg-slate-900 rounded-3xl p-6 flex flex-col justify-between text-slate-300">
+                      <Sparkles className="w-8 h-8 text-yellow-400" />
+                      <div>
+                        <p className="text-xs uppercase tracking-widest font-bold mb-1 opacity-50">Confidence Score</p>
+                        <p className="text-3xl font-bold text-white">
+                          {confidence?.percentage || 0}%
+                        </p>
+                        <p className="text-xs mt-2 text-slate-400">
+                          {confidence?.percentage >= 85 ? 'Perfectly matched' : 
+                           confidence?.percentage >= 70 ? 'Great combination' : 
+                           confidence?.percentage >= 55 ? 'Good pairing' : 'Basic match'}
+                          {template && ` • ${template} style`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
             </div>
           </div>
@@ -329,17 +412,81 @@ const ItemCard = ({ item, label, fallbackIcon, className, isHero }) => {
         )}
       </div>
 
-      {/* Hover Details (Glassmorphism) */}
+      {/* Hover Details (Glassmorphism) - Enhanced with new metadata fields */}
       {item && (
         <div className="absolute inset-x-4 bottom-4 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-          <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-slate-100">
+          <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-slate-100 space-y-2">
             <h4 className="font-bold text-slate-900 truncate">{item.attributes?.sub_category || label}</h4>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+            
+            {/* Primary Info */}
+            <div className="flex items-center gap-2 text-xs text-slate-500">
               <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
               {item.attributes?.primary_color}
+              {item.attributes?.secondary_color && (
+                <>
+                  <span className="mx-1">+</span>
+                  {item.attributes?.secondary_color}
+                </>
+              )}
               <span className="mx-1">•</span>
               {item.attributes?.formality}
             </div>
+
+            {/* Additional Metadata */}
+            <div className="flex flex-wrap gap-1 mt-2">
+              {item.attributes?.pattern && item.attributes.pattern !== 'Solid' && (
+                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium">
+                  {item.attributes.pattern}
+                </span>
+              )}
+              {item.attributes?.material && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
+                  {item.attributes.material}
+                </span>
+              )}
+              {item.attributes?.fit && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
+                  {item.attributes.fit}
+                </span>
+              )}
+            </div>
+
+            {/* Style Tags */}
+            {item.attributes?.style_tags && item.attributes.style_tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {item.attributes.style_tags.slice(0, 3).map((tag, idx) => (
+                  <span key={idx} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Occasion Tags */}
+            {item.attributes?.occasion && item.attributes.occasion.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {item.attributes.occasion.slice(0, 2).map((occ, idx) => (
+                  <span key={idx} className="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs">
+                    {occ}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Advanced Metadata (layer_role, silhouette, etc.) */}
+            {(item.attributes?.layer_role || item.attributes?.silhouette_volume) && (
+              <div className="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                {item.attributes?.layer_role && item.attributes.layer_role !== 'None' && (
+                  <span>{item.attributes.layer_role} Layer</span>
+                )}
+                {item.attributes?.silhouette_volume && item.attributes?.layer_role && (
+                  <span className="mx-1">•</span>
+                )}
+                {item.attributes?.silhouette_volume && (
+                  <span>{item.attributes.silhouette_volume} Fit</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
