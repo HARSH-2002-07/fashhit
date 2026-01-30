@@ -10,6 +10,9 @@ from store import WardrobeStore
 from ontology import OUTFIT_TEMPLATES, Category, StyleIntent
 from intent_formality import formality_bias
 from intent_color_mood import color_mood_bias
+import math
+from statistics import mean
+from consistency import compute_outfit_consistency
 
 DEBUG_REASONING = True
 
@@ -83,7 +86,6 @@ INTENT_RULES = {
         "bonus_match": 0.10,
     },
 }
-
 
 
 def intent_consistency_bonus(outfit: dict, intent: StyleIntent) -> float:
@@ -276,6 +278,50 @@ class LayerEngine:
 
         return 0.2
 
+# In planner.py
+
+class PhysicsEngine:
+    """Ensures layers fit physically (no bulk under slim fit)."""
+    
+    # Items that are physically thick/bulky
+    HIGH_BULK_ITEMS = [
+        "Shawl Cardigan", "Chunky", "Cable Knit", "Heavy Hoodie", 
+        "Puffer", "Oversized Hoodie", "Thick Sweater"
+    ]
+    
+    # Outerwear that is fitted/structured (cannot take bulk)
+    LOW_CAPACITY_OUTER = [
+        "Blazer", "Suit Jacket", "Denim Jacket", 
+        "Slim", "Tailored", "Biker Jacket"
+    ]
+
+    @staticmethod
+    def check_layering_physics(inner_item: dict, outer_item: dict) -> float:
+        """Returns a penalty if layering is physically impossible."""
+        
+        inner_sub = inner_item['meta'].get('sub_category', '')
+        inner_fit = inner_item['meta'].get('fit', '')
+        
+        outer_sub = outer_item['meta'].get('sub_category', '')
+        outer_fit = outer_item['meta'].get('fit', '')
+
+        # Check 1: Bulk under Structure
+        # Is the inner item bulky?
+        is_bulky = any(x in inner_sub for x in PhysicsEngine.HIGH_BULK_ITEMS) or \
+                   inner_fit in ["Oversized", "Loose"]
+        
+        # Is the outer item low capacity?
+        is_tight = any(x in outer_sub for x in PhysicsEngine.LOW_CAPACITY_OUTER) or \
+                   outer_fit in ["Slim", "Skinny", "Tailored"]
+
+        if is_bulky and is_tight:
+            return -0.5  # Heavy Penalty (Uncomfortable)
+
+        # Check 2: Hoodie under Blazer (Stylistic/Physical clash)
+        if "Hoodie" in inner_sub and "Blazer" in outer_sub:
+            return -0.3
+
+        return 0.0
 
 class AccessoryEngine:
     """Enforces Accessory Rules (e.g., Leather Matching)"""
@@ -308,14 +354,52 @@ class AccessoryEngine:
 
 class WeatherEngine:
     SENSITIVE = ["suede", "silk", "satin", "velvet", "canvas", "mesh"]
+
     @staticmethod
-    def is_safe(item: dict, cond: str) -> bool:
+    def is_appropriate_temp(item: dict, temp: float) -> bool:
+        meta = item['meta']
+        sub = meta.get('sub_category', '').lower()
+        
+        # 1. HEAT STROKE PREVENTION (The Fix)
+        # If it's warmer than 15°C (59°F), ban heavy winter gear.
+        if temp > 15:
+            HEAVY_WINTER_ITEMS = [
+                'glove', 'scarf', 'beanie', 'puffer', 
+                'heavy coat', 'overcoat', 'parka', 'wool'
+            ]
+            if any(x in sub for x in HEAVY_WINTER_ITEMS):
+                return False
+            
+        # 2. HYPOTHERMIA PREVENTION
+        # If it's colder than 10°C (50°F), ban summer gear.
+        if temp < 10:
+            SUMMER_ITEMS = ['shorts', 'sandal', 'linen', 'tank']
+            if any(x in sub for x in SUMMER_ITEMS):
+                return False
+                
+        # Rule: No exposed skin below 10°C
+        if temp < 10:
+            if any(x in sub for x in ['shorts', 'sandal', 'linen']):
+                return False
+                
+        return True
+    
+    @staticmethod
+    def is_safe(item: dict, cond: str, temp: float = 20) -> bool:
         if "rain" not in cond.lower() and "snow" not in cond.lower(): return True
         meta = item['meta']
         name = meta.get('sub_category', '').lower()
+
+        if "rain" in cond.lower():
+            if any(x in name for x in ["sandal", "slide", "flip", "espadrille"]):
+                return False
+
         if any(x in name for x in WeatherEngine.SENSITIVE): return False
         if "footwear" in meta.get('category', '').lower() and "white" in meta.get('primary_color', '').lower(): return False
+        if not WeatherEngine.is_appropriate_temp(item, temp):
+            return False
         return True
+    
 
 class ContextBrain:
     @staticmethod
@@ -353,6 +437,17 @@ class NeuroSymbolicEngine:
         # C. Category-Specific Logic
         cat_a = item_a['meta'].get('category')
         cat_b = item_b['meta'].get('category')
+
+        # --- NEW: PHYSICS CHECK (Layering) ---
+        # Detect which is Inner (Top) and which is Outer (Outerwear)
+        if {cat_a, cat_b} == {"Top", "Outerwear"}:
+            inner = item_a if cat_a == "Top" else item_b
+            outer = item_b if cat_b == "Outerwear" else item_a
+            
+            # Apply Physics Penalty
+            physics_score = PhysicsEngine.check_layering_physics(inner, outer)
+            score += physics_score
+        # -------------------------------------
 
         # Silhouette is evaluated at outfit-level, not pair-level
             
@@ -587,8 +682,16 @@ class ProPlannerV7:
         return sorted(candidates, key=lambda x: x['score'], reverse=True)
 
     def plan(self, user_query: str, manual_weather: str = None) -> dict:
+        
         weather = LiveWeather.get_weather()
         if manual_weather: weather['condition'] = manual_weather 
+        
+        # In planner.plan()
+        query_lower = user_query.lower()
+        if "rain" in query_lower or "storm" in query_lower:
+            weather['condition'] = "Rainy"
+        elif "hot" in query_lower or "summer" in query_lower:
+            weather['temp'] = 30 # Override temp context
         
         print(f"\n🌍 {weather['city']}: {weather['condition']}, {weather['temp']}°C")
         print(f"🚀 Planning for: '{user_query}'")
@@ -664,6 +767,9 @@ class ProPlannerV7:
                 for c in candidates_map[slot_name]:
                     curr = c['item']
                     c_vec = self.store.vectors[curr['id']]
+
+                    if not WeatherEngine.is_safe(curr, weather["condition"]):
+                        continue
                     
                     used = {i["meta"]["sub_category"] for i in items}
 
@@ -677,11 +783,34 @@ class ProPlannerV7:
                     # Weighted Score
                     slot_weight = SLOT_WEIGHTS.get(slot_name, 1.0)
 
-                    new_score = (
-                        score * 0.4
-                        + (c["score"] * slot_weight) * 0.3
-                        + compatibility * 0.3)
-                    
+                    tentative_outfit = {
+                        s: i for s, i in zip(
+                            valid_slot_names[:len(items) + 1],
+                            items + [curr]
+                        )
+                    }
+
+                    ocs = compute_outfit_consistency(
+                        tentative_outfit,
+                        intent=template["intent"],
+                        weather=weather
+                    )
+                    if "rain" in weather["condition"].lower():
+                        if ocs["score"] < 0.75:
+                            continue
+
+                    ocs_score = ocs["score"]
+                    # print("🧪 OCS Score so far:", ocs_score)
+                    base_score = (
+                        score * 0.35
+                        + (c["score"] * slot_weight) * 0.25
+                        + compatibility * 0.25
+                    )
+
+                    new_score = base_score * (0.6 + 0.4 * ocs_score)
+
+
+                                       
                     next_beam.append((new_score, items + [curr]))
             
             beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:self.BEAM_WIDTH]
@@ -696,11 +825,19 @@ class ProPlannerV7:
             confidence = compute_confidence(
     outfit, template_name, weather, self.store.vectors
 )["score"]
+    #         ocs = compute_outfit_consistency(
+    # outfit=outfit,
+    # intent=template["intent"],
+    # weather=weather
+        #       )           
+            # print("🧪 OCS:", ocs)
+
+            # x
 
             final_score = final_score = (
-    score * 0.7
-    + confidence * 0.3
-    + intent_consistency_bonus(outfit, template["intent"]) * 0.10
+    score * 0.6
+    + confidence * 0.25
+    + ocs_score * 0.15
 )
 
 
@@ -715,7 +852,8 @@ class ProPlannerV7:
     template_name=template_name,
     weather=weather,
     vectors=self.store.vectors
-)
+)       
+        
 
         confidence_score = confidence["score"]
         # if confidence_score < CONFIDENCE_THRESHOLDS["minimum"]:
@@ -751,11 +889,11 @@ class ProPlannerV7:
         if upgrade_msg:
             print(f"💡 SHOPPING INSIGHT: {upgrade_msg}")
         
-        Visualizer.show_outfit(
-    outfit,
-    title=f"{user_query} ({weather['condition']}) — Confidence: {confidence_score:.2f}",
-    recommendation=upgrade_msg
-)
+#         Visualizer.show_outfit(
+#     outfit,
+#     title=f"{user_query} ({weather['condition']}) — Confidence: {confidence_score:.2f}",
+#     recommendation=upgrade_msg
+# )
         if DEBUG_REASONING:
             print("\n🔍 Candidate diagnostics:")
             for slot, candidates in candidates_map.items():
