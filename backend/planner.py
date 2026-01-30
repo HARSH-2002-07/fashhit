@@ -7,7 +7,9 @@ from PIL import Image
 from typing import List, Dict
 from fashion_clip.fashion_clip import FashionCLIP
 from store import WardrobeStore
-from ontology import OUTFIT_TEMPLATES, Category
+from ontology import OUTFIT_TEMPLATES, Category, StyleIntent
+from intent_formality import formality_bias
+from intent_color_mood import color_mood_bias
 
 DEBUG_REASONING = True
 
@@ -32,6 +34,79 @@ CONFIDENCE_WEIGHTS = {
     "weather": 0.05,
     "versatility": 0.10
 }
+
+SLOT_WEIGHTS = {
+    "Top": 1.2,
+    "Footwear": 1.15,
+    "Outerwear": 1.1,
+    "Bottom": 1.0,
+    "Accessory": 0.7,
+}
+
+INTENT_TOPK = {
+    StyleIntent.FORMAL_EVENT: 8,
+    StyleIntent.SMART_CASUAL: 10,
+    StyleIntent.CASUAL_DAY: 12,
+    StyleIntent.STREET: 14,
+    StyleIntent.LAYERED_COLD: 12,
+}
+
+INTENT_RULES = {
+    StyleIntent.CASUAL_DAY: {
+        "allowed_formalities": {"Casual", "Lounge"},
+        "penalty_formal": 0.4,
+        "bonus_match": 0.15,
+    },
+    StyleIntent.SMART_CASUAL: {
+        "allowed_formalities": {"Casual", "Smart Casual"},
+        "penalty_formal": 0.25,
+        "bonus_match": 0.20,
+    },
+    StyleIntent.FORMAL_EVENT: {
+        "allowed_formalities": {"Formal", "Smart Casual"},
+        "penalty_formal": 0.5,
+        "bonus_match": 0.30,
+    },
+    StyleIntent.STREET: {
+        "allowed_formalities": {"Casual"},
+        "penalty_formal": 0.35,
+        "bonus_match": 0.20,
+    },
+    StyleIntent.LAYERED_COLD: {
+        "allowed_formalities": {"Casual", "Smart Casual"},
+        "penalty_formal": 0.20,
+        "bonus_match": 0.15,
+    },
+    StyleIntent.LOUNGE: {
+        "allowed_formalities": {"Lounge", "Casual"},
+        "penalty_formal": 0.6,
+        "bonus_match": 0.10,
+    },
+}
+
+
+
+def intent_consistency_bonus(outfit: dict, intent: StyleIntent) -> float:
+    rules = INTENT_RULES.get(intent)
+    if not rules:
+        return 0.0
+
+    allowed = rules["allowed_formalities"]
+    bonus = rules["bonus_match"]
+    penalty = rules["penalty_formal"]
+
+    score = 0.0
+
+    for item in outfit.values():
+        f = item["meta"].get("formality", "Casual")
+        if f in allowed:
+            score += bonus
+        else:
+            score -= penalty
+
+    return score / max(len(outfit), 1)
+
+
 
 def formality_score(outfit: dict) -> float:
     formalities = [
@@ -531,14 +606,34 @@ class ProPlannerV7:
         candidates_map = {}        
         # q_vec = self.fclip.encode_text([user_query], batch_size=1)[0]
         # candidates_map = {}
-        
+
+        INTENT_TOPK = {
+    StyleIntent.FORMAL_EVENT: 8,
+    StyleIntent.SMART_CASUAL: 10,
+    StyleIntent.CASUAL_DAY: 12,
+    StyleIntent.STREET: 14,
+    StyleIntent.LAYERED_COLD: 12,
+}
+
         # 1. Retrieval
         for slot in slot_rules:
             category = slot["category"]
             required = slot.get("required", True)
             slot_name = category.value
-            raw = self.store.vector_search(q_vec, category_filter=slot_name, top_k=20)
-            ranked = self.apply_hybrid_ranking(raw, user_query)
+            top_k = INTENT_TOPK.get(template["intent"], 12)
+            raw = self.store.vector_search(q_vec, category_filter=slot_name, top_k=top_k)
+
+            intent = template["intent"]
+
+            ranked = []
+            for r in raw:
+                fb = formality_bias(r["item"], intent)
+                cb = color_mood_bias(r["item"], intent)
+                r["score"] *= (fb * cb)
+                ranked.append(r)
+
+            ranked.sort(key=lambda x: x["score"], reverse=True)
+
             valid = [r for r in ranked if WeatherEngine.is_safe(r['item'], weather['condition'])]
             
             if not valid:
@@ -570,9 +665,23 @@ class ProPlannerV7:
                     curr = c['item']
                     c_vec = self.store.vectors[curr['id']]
                     
-                    compatibility = NeuroSymbolicEngine.evaluate_pair(last, curr, l_vec, c_vec)
+                    used = {i["meta"]["sub_category"] for i in items}
+
+                    compatibility = NeuroSymbolicEngine.evaluate_pair(
+                        last, curr, l_vec, c_vec
+                    )
+
+                    if curr["meta"]["sub_category"] in used:
+                        compatibility -= 0.2
+
                     # Weighted Score
-                    new_score = (score * 0.4) + (c['score'] * 0.3) + (compatibility * 0.3)
+                    slot_weight = SLOT_WEIGHTS.get(slot_name, 1.0)
+
+                    new_score = (
+                        score * 0.4
+                        + (c["score"] * slot_weight) * 0.3
+                        + compatibility * 0.3)
+                    
                     next_beam.append((new_score, items + [curr]))
             
             beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:self.BEAM_WIDTH]
@@ -588,7 +697,12 @@ class ProPlannerV7:
     outfit, template_name, weather, self.store.vectors
 )["score"]
 
-            final_score = (score * 0.7) + (confidence * 0.3)
+            final_score = final_score = (
+    score * 0.7
+    + confidence * 0.3
+    + intent_consistency_bonus(outfit, template["intent"]) * 0.10
+)
+
 
             if final_score > best_score:
                 best_score = final_score
