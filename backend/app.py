@@ -32,6 +32,13 @@ except ImportError:
     has_planner = False
     print("⚠️ planner module not available")
 
+try:
+    from update_json import classify_attribute, ATTRIBUTES
+    has_update_json = True
+except ImportError:
+    has_update_json = False
+    print("⚠️ update_json module not available")
+
 # Load environment variables
 load_dotenv()
 
@@ -61,8 +68,19 @@ if has_json_processor:
     try:
         gemini_model = init_gemini()
         fashion_clip = init_fashion_clip()
+        
+        # CRITICAL: Set the global variables in json_from_clean module
+        # The get_tags_with_retry and process_image_batch functions use these globals
+        import json_from_clean
+        json_from_clean.model = gemini_model
+        json_from_clean.fclip = fashion_clip
+        
+        print(f"✅ Gemini model initialized: {gemini_model is not None}")
+        print(f"✅ FashionCLIP initialized: {fashion_clip is not None}")
     except Exception as e:
         print(f"⚠️ Failed to initialize AI models: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Load essentials.json (global fashion items - no user_id required)
 ESSENTIALS_DATA = []
@@ -201,12 +219,42 @@ def process_clothing():
             if has_json_processor and fashion_clip:
                 try:
                     from pathlib import Path
-                    embeddings = process_image_batch([Path(clean_image_path)], fashion_clip)
+                    embeddings = process_image_batch([Path(clean_image_path)])
                     if embeddings and len(embeddings) > 0:
                         embedding = embeddings[0]
                         print(f"✅ Generated {len(embedding)}-dim embedding")
                 except Exception as e:
                     print(f"⚠️ Embedding generation failed: {e}")
+            
+            # Step 4.5: Enhance attributes with FashionCLIP visual analysis
+            if has_update_json and has_json_processor and fashion_clip:
+                try:
+                    print("🔍 Enhancing attributes with visual analysis...")
+                    
+                    # Detect Fit
+                    fit = classify_attribute(fashion_clip, clean_image_path, ATTRIBUTES["fit"])
+                    if gemini_attributes.get('fit') in [None, 'Regular']:
+                        gemini_attributes['fit'] = fit
+                    
+                    # Detect Cut/Length (for relevant categories)
+                    if gemini_attributes.get('category') in ['Top', 'Bottom', 'Outerwear']:
+                        cut = classify_attribute(fashion_clip, clean_image_path, ATTRIBUTES["cut"])
+                        # Normalize cut
+                        if cut == "Ankle":
+                            cut = "Cropped"
+                        gemini_attributes['length_profile'] = cut
+                        gemini_attributes['cut'] = cut
+                    
+                    # Detect Occasion
+                    occasion = classify_attribute(fashion_clip, clean_image_path, ATTRIBUTES["occasion"])
+                    if occasion and occasion not in gemini_attributes.get('occasion', []):
+                        if 'occasion' not in gemini_attributes or not isinstance(gemini_attributes['occasion'], list):
+                            gemini_attributes['occasion'] = []
+                        gemini_attributes['occasion'].append(occasion)
+                    
+                    print(f"✅ Enhanced: fit={fit}, cut={gemini_attributes.get('cut', 'N/A')}, occasion={occasion}")
+                except Exception as e:
+                    print(f"⚠️ Attribute enhancement failed: {e}")
             
             # Close PIL images to release file handles
             pil_image.close()
@@ -222,6 +270,10 @@ def process_clothing():
                     'success': False,
                     'error': 'User ID required'
                 }), 400
+            
+            # Debug: Print category value
+            print(f"🔍 DEBUG - Category from form: '{category}' (type: {type(category).__name__})")
+            print(f"🔍 DEBUG - Allowed categories: ['tops', 'bottoms', 'shoes', 'outerwear', 'one_piece', 'accessory']")
             
             wardrobe_data = {
                 'user_id': user_id,

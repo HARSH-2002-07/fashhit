@@ -1,0 +1,31 @@
+2026-01-31 08:26:31,243 - INFO - Using model: gemini-2.5-flash-lite (Rate limit: 10 RPM)
+2026-01-31 08:26:31,244 - INFO - Loading FashionCLIP model...
+2026-01-31 08:27:00,424 - INFO - Using model: gemini-2.5-flash-lite (Rate limit: 10 RPM)
+2026-01-31 08:27:00,424 - INFO - Loading FashionCLIP model...
+2026-01-31 08:27:03,881 - INFO - Found 2 images
+2026-01-31 08:27:03,881 - INFO - Processing 2 items (skipping 0 existing)
+2026-01-31 08:27:03,882 - INFO - Estimated processing time: 0.2 minutes (gemini-2.5-flash-lite @ 10 RPM)
+2026-01-31 08:27:03,882 - INFO - Computing embeddings for 2 images in batches...
+2026-01-31 08:27:10,073 - INFO - Generating AI tags with rate limiting...
+2026-01-31 08:27:10,073 - INFO - Using 3 workers with 6.5s delay between API calls
+2026-01-31 08:27:20,963 - INFO - 
+Completed in 0.2 minutes
+2026-01-31 08:27:20,964 - INFO - Successfully processed 2 items
+2026-01-31 08:27:21,019 - INFO - 
+Wardrobe Summary:
+{
+  "total_items": 2,
+  "categories": {
+    "Footwear": 2
+  },
+  "colors": {
+    "White": 2
+  },
+  "patterns": {
+    "Solid": 1,
+    "Logo": 1
+  },
+  "formality": {
+    "Casual": 2
+  }
+}

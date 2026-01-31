@@ -28,8 +28,8 @@ if sys.platform == 'win32':
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # ⚠️ REPLACE ME
-CLEAN_IMAGES_DIR = Path("Ideal Wardrobe/data/images")
-JSON_OUTPUT_DIR = Path("Ideal Wardrobe/data/json")
+CLEAN_IMAGES_DIR = Path("my_wardrobe/data/images")
+JSON_OUTPUT_DIR = Path("my_wardrobe/data/json")
 
 # Model selection - gemini-2.5-flash-lite is BEST for free tier (10 RPM vs 5 RPM)
 # ┌────────────────────────┬──────┬─────────────────────┐
@@ -39,7 +39,7 @@ JSON_OUTPUT_DIR = Path("Ideal Wardrobe/data/json")
 # │ gemini-2.5-flash       │   5  │ ~7.4 min (34 items) │
 # │ gemini-3-flash         │   5  │ ~7.4 min (34 items) │
 # └────────────────────────┴──────┴─────────────────────┘
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 REQUESTS_PER_MINUTE = 10
 
 MAX_WORKERS = 3  # Optimal for 10 RPM

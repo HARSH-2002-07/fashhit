@@ -129,9 +129,14 @@ const VirtualCloset = () => {
           'tops': 'tops',
           'bottoms': 'bottoms',
           'shoes': 'shoes',
-          'outerwear': 'outerwear'
+          'outerwear': 'outerwear',
+          'all': 'tops', // Default to tops if uploading from All tab
+          'saved outfits': 'tops' // Default to tops if somehow uploading from saved outfits
         };
-        const uploadCategory = categoryMap[selectedTab.toLowerCase()] || selectedTab.toLowerCase();
+        const uploadCategory = categoryMap[selectedTab.toLowerCase()] || 'tops';
+        
+        console.log(`📤 Uploading to category: ${uploadCategory} (from tab: ${selectedTab})`);
+        
         formData.append('category', uploadCategory);
         formData.append('user_id', user?.id);
         
