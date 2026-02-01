@@ -2,6 +2,7 @@ import os
 import json
 import tempfile
 import requests
+from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -866,6 +867,116 @@ def recommend_outfit():
             }), 200
     except Exception as e:
         print(f"❌ Error generating outfit: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/swap-item', methods=['POST'])
+def swap_item():
+    """Swap a single item in an existing outfit while keeping others locked."""
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        slot_to_swap = data.get('slot')  # e.g., "shoes", "tops", "bottoms"
+        current_outfit = data.get('current_outfit', {})
+        
+        if not user_id or not slot_to_swap:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        print(f"🔄 Swapping {slot_to_swap} for user {user_id}")
+        
+        # Get user's wardrobe items for the slot category
+        response = supabase.table('wardrobe_items')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .eq('category', slot_to_swap)\
+            .execute()
+        
+        available_items = response.data
+        
+        if not available_items:
+            return jsonify({
+                'success': False,
+                'error': f'No {slot_to_swap} items found in wardrobe'
+            }), 404
+        
+        # Filter out the current item from the slot
+        current_item_id = current_outfit.get(slot_to_swap, {}).get('id')
+        if current_item_id:
+            available_items = [item for item in available_items if item['id'] != current_item_id]
+        
+        if not available_items:
+            return jsonify({
+                'success': False,
+                'error': f'No alternative {slot_to_swap} items available'
+            }), 404
+        
+        # Simple selection: pick a random alternative
+        import random
+        new_item = random.choice(available_items)
+        
+        # Update the outfit
+        current_outfit[slot_to_swap] = new_item
+        
+        print(f"✅ Swapped {slot_to_swap}: {new_item.get('sub_category', 'Unknown')}")
+        
+        return jsonify({
+            'success': True,
+            'outfit': current_outfit,
+            'swapped_slot': slot_to_swap,
+            'new_item': new_item
+        }), 200
+            
+    except Exception as e:
+        print(f"❌ Error swapping item: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/feedback', methods=['POST'])
+def save_feedback():
+    """Save user feedback on outfit recommendations for reinforcement learning."""
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        rating = data.get('rating')  # 'like' or 'dislike'
+        outfit_items = data.get('outfit_items', {})
+        scenario = data.get('scenario', '')
+        
+        if not user_id or not rating:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        # Create outfit_id from item IDs for tracking
+        item_ids = sorted([str(item.get('id', '')) for item in outfit_items.values() if item])
+        outfit_id = '-'.join(item_ids)
+        
+        # Save to Supabase
+        feedback_data = {
+            'user_id': user_id,
+            'outfit_id': outfit_id,
+            'rating': rating,
+            'outfit_items': outfit_items,
+            'scenario': scenario,
+            'created_at': datetime.now().isoformat()
+        }
+        
+        result = supabase.table('outfit_feedback').insert(feedback_data).execute()
+        
+        print(f"📊 Feedback saved: {rating} for user {user_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Feedback saved successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error saving feedback: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({

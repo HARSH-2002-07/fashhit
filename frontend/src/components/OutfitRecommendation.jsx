@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { 
   Home, User, RefreshCw, Sparkles, Loader2, Heart, LogOut, 
-  CloudRain, ShoppingBag, ArrowRight, Shirt, Zap, MapPin 
+  CloudRain, ShoppingBag, ArrowRight, Shirt, Zap, MapPin, ThumbsUp, ThumbsDown 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import '../styles/weather-animations.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -18,18 +19,68 @@ const OutfitRecommendation = () => {
   const [error, setError] = useState(null);
   const [currentOutfit, setCurrentOutfit] = useState(null);
   const [scenario, setScenario] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedOutfitId, setSavedOutfitId] = useState(null);
   const [shoppingTip, setShoppingTip] = useState(null);
   const [weather, setWeather] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [confidence, setConfidence] = useState(null);
   const [template, setTemplate] = useState(null);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'paperdoll'
+  const [swappingSlot, setSwappingSlot] = useState(null); // Track which item is being swapped
+  const [userFeedback, setUserFeedback] = useState(null); // 'like' | 'dislike' | null
+
+  // --- Weather Background Gradient ---
+  const getWeatherBackground = () => {
+    if (!weather?.condition) return 'bg-gradient-to-br from-slate-50 to-slate-100';
+    
+    const condition = weather.condition.toLowerCase();
+    
+    if (condition.includes('rain') || condition.includes('storm') || condition.includes('drizzle')) {
+      return 'bg-gradient-to-br from-blue-900 via-slate-700 to-blue-800';
+    } else if (condition.includes('cloud') || condition.includes('overcast')) {
+      return 'bg-gradient-to-br from-slate-400 via-gray-300 to-slate-500';
+    } else if (condition.includes('sun') || condition.includes('clear') || condition.includes('bright')) {
+      return 'bg-gradient-to-br from-amber-300 via-orange-200 to-yellow-300';
+    } else if (condition.includes('snow') || condition.includes('blizzard')) {
+      return 'bg-gradient-to-br from-blue-50 via-slate-100 to-blue-100';
+    } else if (condition.includes('fog') || condition.includes('mist') || condition.includes('haze')) {
+      return 'bg-gradient-to-br from-slate-300 via-gray-200 to-slate-400';
+    } else if (condition.includes('wind')) {
+      return 'bg-gradient-to-br from-cyan-200 via-sky-100 to-blue-200';
+    } else if (condition.includes('night')) {
+      return 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900';
+    }
+    
+    return 'bg-gradient-to-br from-slate-50 to-slate-100';
+  };
+
+  const getWeatherEffect = () => {
+    if (!weather?.condition) return 'weather-breathe';
+    
+    const condition = weather.condition.toLowerCase();
+    
+    if (condition.includes('rain') || condition.includes('storm') || condition.includes('drizzle')) {
+      return 'rain-effect weather-breathe';
+    } else if (condition.includes('cloud') || condition.includes('overcast')) {
+      return 'cloud-effect weather-breathe';
+    } else if (condition.includes('sun') || condition.includes('clear') || condition.includes('bright')) {
+      return 'sun-effect weather-breathe';
+    } else if (condition.includes('snow') || condition.includes('blizzard')) {
+      return 'snow-effect weather-breathe';
+    }
+    
+    return 'weather-breathe';
+  };
 
   // --- Logic Handlers ---
   const handleRecommend = async () => {
     if (!scenario.trim()) return;
     setLoading(true);
     setError(null);
+    setUserFeedback(null);
+    setIsSaved(false);
+    setSavedOutfitId(null);
     
     try {
       const response = await fetch(`${API_URL}/recommend-outfit`, {
@@ -59,26 +110,93 @@ const OutfitRecommendation = () => {
   const handleSaveOutfit = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/save-outfit`, {
+      if (isSaved && savedOutfitId) {
+        // Unsave: delete from database
+        const response = await fetch(`${API_URL}/saved-outfits/${savedOutfitId}`, {
+          method: 'DELETE'
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error('Failed to unsave');
+
+        setIsSaved(false);
+        setSavedOutfitId(null);
+        console.log('Outfit unsaved successfully');
+      } else {
+        // Save: add to database
+        const response = await fetch(`${API_URL}/save-outfit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: user?.id,
+            outfit: currentOutfit,
+            occasion: scenario,
+            created_at: new Date().toISOString()
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error('Failed to save');
+
+        setIsSaved(true);
+        setSavedOutfitId(result.data[0].id);
+        console.log('Outfit saved successfully');
+      }
+    } catch (error) {
+      setError(error.message);
+      console.error('Error toggling save:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSwapItem = async (slot) => {
+    setSwappingSlot(slot);
+    try {
+      const response = await fetch(`${API_URL}/swap-item`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: user?.id,
-          outfit: currentOutfit,
-          occasion: scenario,
-          created_at: new Date().toISOString()
+          slot: slot,
+          current_outfit: currentOutfit,
+          query: scenario
         })
       });
 
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error('Failed to save');
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to swap item');
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setCurrentOutfit(result.outfit);
+      console.log(`✅ Swapped ${slot}`);
     } catch (error) {
+      console.error('Error swapping item:', error);
       setError(error.message);
     } finally {
-      setLoading(false);
+      setSwappingSlot(null);
+    }
+  };
+
+  const handleFeedback = async (rating) => {
+    try {
+      const response = await fetch(`${API_URL}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user?.id,
+          rating: rating, // 'like' or 'dislike'
+          outfit_items: currentOutfit,
+          scenario: scenario
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error('Failed to save feedback');
+
+      setUserFeedback(rating);
+      console.log(`📊 Feedback: ${rating}`);
+    } catch (error) {
+      console.error('Error sending feedback:', error);
     }
   };
 
@@ -226,17 +344,57 @@ const OutfitRecommendation = () => {
               </div>
               
               <div className="flex gap-3">
+                {/* Feedback Buttons */}
+                <button 
+                  onClick={() => handleFeedback('like')}
+                  className={`p-3 border rounded-xl transition-all group ${
+                    userFeedback === 'like'
+                      ? 'bg-green-500 text-white border-green-600 shadow-lg shadow-green-200'
+                      : 'bg-white border-slate-200 text-slate-500 hover:text-green-600 hover:border-green-300'
+                  }`}
+                  title="I like this outfit"
+                >
+                  <ThumbsUp className={`w-5 h-5 ${
+                    userFeedback === 'like' ? 'fill-current' : 'group-hover:fill-green-100'
+                  }`} />
+                </button>
+                <button 
+                  onClick={() => handleFeedback('dislike')}
+                  className={`p-3 border rounded-xl transition-all group ${
+                    userFeedback === 'dislike'
+                      ? 'bg-red-500 text-white border-red-600 shadow-lg shadow-red-200'
+                      : 'bg-white border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-300'
+                  }`}
+                  title="I don't like this outfit"
+                >
+                  <ThumbsDown className={`w-5 h-5 ${
+                    userFeedback === 'dislike' ? 'fill-current' : 'group-hover:fill-red-100'
+                  }`} />
+                </button>
+                
+                {/* View Mode Toggle */}
+                <button 
+                  onClick={() => setViewMode(viewMode === 'grid' ? 'paperdoll' : 'grid')} 
+                  className="px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {viewMode === 'grid' ? 'Paper Doll' : 'Grid View'}
+                </button>
+                
+                {/* Save Button */}
                 <button 
                   onClick={handleSaveOutfit}
                   className={`px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all ${
-                    saveSuccess 
+                    isSaved 
                       ? 'bg-green-500 text-white shadow-lg shadow-green-200' 
                       : 'bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-md'
                   }`}
                 >
-                  <Heart className={`w-5 h-5 ${saveSuccess ? 'fill-current' : ''}`} />
-                  {saveSuccess ? 'Saved!' : 'Save Look'}
+                  <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                  {isSaved ? 'Saved!' : 'Save Look'}
                 </button>
+                
+                {/* Regenerate Button */}
                 <button 
                   onClick={handleRecommend} 
                   className="p-3 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all"
@@ -246,8 +404,166 @@ const OutfitRecommendation = () => {
               </div>
             </div>
 
-            {/* Bento Grid Layout - Adaptive for outfit type */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 min-h-[600px]">
+            {/* Conditional Layout: Paper Doll or Grid */}
+            {viewMode === 'paperdoll' ? (
+              /* Paper Doll Overlay View */
+              <div className={`relative min-h-[700px] rounded-3xl overflow-hidden ${getWeatherBackground()} ${getWeatherEffect()} transition-all duration-700`}>
+                {/* Weather indicator overlay */}
+                {weather?.condition && (
+                  <div className="absolute top-6 right-6 px-4 py-2 bg-white/90 backdrop-blur-md rounded-full text-sm font-medium text-slate-700 shadow-lg z-50">
+                    <CloudRain className="w-4 h-4 inline mr-2" />
+                    {weather.condition} • {weather.temp}°C
+                  </div>
+                )}
+                
+                {/* Layered items - Paper Doll style with fixed canvas */}
+                <div className="flex items-center justify-center min-h-[700px] p-8">
+                  <div className="relative" style={{ width: '400px', height: '600px' }}>
+                    
+                    {/* Outerwear (Jacket) - Widest layer to contain torso */}
+                    {currentOutfit?.outerwear && (
+                      <img 
+                        src={currentOutfit.outerwear.clean_image_url} 
+                        alt="Outerwear"
+                        style={{
+                          position: 'absolute',
+                          width: '55%',
+                          top: '5%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          zIndex: 3,
+                          height: 'auto',
+                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                        }}
+                        className="object-contain animate-in fade-in zoom-in duration-1000"
+                      />
+                    )}
+                    
+                    {/* Top (Shirt) - Slightly smaller, peeks through outerwear */}
+                    {currentOutfit?.tops && (
+                      <img 
+                        src={currentOutfit.tops.clean_image_url} 
+                        alt="Top"
+                        style={{
+                          position: 'absolute',
+                          width: '48%',
+                          top: '8%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          zIndex: 2,
+                          height: 'auto',
+                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                        }}
+                        className="object-contain animate-in fade-in zoom-in duration-700"
+                      />
+                    )}
+                    
+                    {/* Bottoms (Pants) - Narrower than shoulders to simulate waist */}
+                    {currentOutfit?.bottoms && (
+                      <img 
+                        src={currentOutfit.bottoms.clean_image_url} 
+                        alt="Bottoms"
+                        style={{
+                          position: 'absolute',
+                          width: '42%',
+                          top: '40%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          zIndex: 1,
+                          height: 'auto',
+                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                        }}
+                        className="object-contain animate-in fade-in zoom-in duration-500"
+                      />
+                    )}
+                    
+                    {/* Footwear - Stable bottom position */}
+                    {currentOutfit?.shoes && (
+                      <img 
+                        src={currentOutfit.shoes.clean_image_url} 
+                        alt="Footwear"
+                        style={{
+                          position: 'absolute',
+                          width: '35%',
+                          bottom: '8%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          zIndex: 4,
+                          height: 'auto',
+                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                        }}
+                        className="object-contain animate-in fade-in slide-in-from-bottom-4 duration-700"
+                      />
+                    )}
+                    
+                    {/* One-Piece (if exists, replaces top + bottom) */}
+                    {currentOutfit?.one_piece && (
+                      <img 
+                        src={currentOutfit.one_piece.clean_image_url} 
+                        alt="One-Piece"
+                        style={{
+                          position: 'absolute',
+                          width: '50%',
+                          top: '8%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          zIndex: 2,
+                          height: 'auto',
+                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                        }}
+                        className="object-contain animate-in fade-in zoom-in duration-700"
+                      />
+                    )}
+                    
+                    {/* Accessory - Floating top-right */}
+                    {currentOutfit?.accessory && (
+                      <img 
+                        src={currentOutfit.accessory.clean_image_url} 
+                        alt="Accessory"
+                        style={{
+                          position: 'absolute',
+                          top: '5%',
+                          right: '8%',
+                          zIndex: 5,
+                          width: '20%',
+                          height: 'auto',
+                          filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.25))'
+                        }}
+                        className="object-contain animate-in fade-in slide-in-from-right-4 duration-700"
+                      />
+                    )}
+                  </div>
+                </div>
+                
+                {/* Confidence Badge */}
+                <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur-xl p-6 rounded-2xl shadow-lg border border-slate-100 z-50">
+                  <p className="text-xs uppercase tracking-widest font-bold mb-1 text-slate-500">Confidence</p>
+                  <p className="text-4xl font-bold text-indigo-600">
+                    {confidence?.percentage || 0}%
+                  </p>
+                  <p className="text-xs mt-2 text-slate-600">
+                    {confidence?.percentage >= 85 ? 'Perfect Match' : 
+                     confidence?.percentage >= 70 ? 'Great Look' : 
+                     confidence?.percentage >= 55 ? 'Good Pairing' : 'Basic'}
+                  </p>
+                </div>
+                
+                {/* Shopping Tip */}
+                {shoppingTip && (
+                  <div className="absolute bottom-6 right-6 max-w-sm bg-amber-50/95 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-amber-200 z-50">
+                    <div className="flex items-start gap-3">
+                      <ShoppingBag className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-amber-900 uppercase tracking-wide mb-1">Shopping Tip</p>
+                        <p className="text-sm text-amber-800">{shoppingTip}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Original Bento Grid Layout */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 min-h-[600px]">
               
               {/* Check if one-piece outfit */}
               {currentOutfit?.one_piece ? (
@@ -261,6 +577,9 @@ const OutfitRecommendation = () => {
                       fallbackIcon={<Shirt />}
                       className="h-full"
                       isHero={true}
+                      onSwap={handleSwapItem}
+                      slotKey="one_piece"
+                      isSwapping={swappingSlot === 'one_piece'}
                     />
                   </div>
 
@@ -271,6 +590,9 @@ const OutfitRecommendation = () => {
                       label="Footwear" 
                       fallbackIcon={<ShoppingBag />}
                       className="flex-1"
+                      onSwap={handleSwapItem}
+                      slotKey="shoes"
+                      isSwapping={swappingSlot === 'shoes'}
                     />
                     {currentOutfit?.accessory && (
                       <ItemCard 
@@ -278,6 +600,9 @@ const OutfitRecommendation = () => {
                         label="Accessory" 
                         fallbackIcon={<Sparkles />}
                         className="flex-1"
+                        onSwap={handleSwapItem}
+                        slotKey="accessory"
+                        isSwapping={swappingSlot === 'accessory'}
                       />
                     )}
                   </div>
@@ -314,6 +639,9 @@ const OutfitRecommendation = () => {
                         label="Outerwear" 
                         fallbackIcon={<Shirt />}
                         className="flex-1"
+                        onSwap={handleSwapItem}
+                        slotKey="outerwear"
+                        isSwapping={swappingSlot === 'outerwear'}
                       />
                     ) : currentOutfit?.accessory ? (
                       <ItemCard 
@@ -321,6 +649,9 @@ const OutfitRecommendation = () => {
                         label="Accessory" 
                         fallbackIcon={<Sparkles />}
                         className="flex-1"
+                        onSwap={handleSwapItem}
+                        slotKey="accessory"
+                        isSwapping={swappingSlot === 'accessory'}
                       />
                     ) : (
                       <div className="flex-1 bg-white/50 rounded-3xl border border-dashed border-slate-200 flex items-center justify-center text-slate-300">
@@ -333,6 +664,9 @@ const OutfitRecommendation = () => {
                       label="Top" 
                       fallbackIcon={<Shirt />}
                       className="flex-1"
+                      onSwap={handleSwapItem}
+                      slotKey="tops"
+                      isSwapping={swappingSlot === 'tops'}
                     />
                   </div>
 
@@ -344,6 +678,9 @@ const OutfitRecommendation = () => {
                       fallbackIcon={<Shirt />}
                       className="h-full"
                       isHero={true}
+                      onSwap={handleSwapItem}
+                      slotKey="bottoms"
+                      isSwapping={swappingSlot === 'bottoms'}
                     />
                   </div>
 
@@ -354,6 +691,9 @@ const OutfitRecommendation = () => {
                       label="Footwear" 
                       fallbackIcon={<ShoppingBag />}
                       className="h-1/2"
+                      onSwap={handleSwapItem}
+                      slotKey="shoes"
+                      isSwapping={swappingSlot === 'shoes'}
                     />
                     
                     {/* Confidence & Info Block */}
@@ -375,8 +715,8 @@ const OutfitRecommendation = () => {
                   </div>
                 </>
               )}
-
-            </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -385,24 +725,36 @@ const OutfitRecommendation = () => {
 };
 
 // --- Helper Component: Individual Item Card ---
-const ItemCard = ({ item, label, fallbackIcon, className, isHero }) => {
+const ItemCard = ({ item, label, fallbackIcon, className, isHero, onSwap, slotKey, isSwapping }) => {
   return (
     <div className={`relative group bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 ${className}`}>
       {/* Background Gradient for depth */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-white opacity-50"></div>
       
-      <div className="absolute top-4 left-4 z-10">
+      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
         <span className="px-3 py-1 bg-white/90 backdrop-blur-md rounded-full text-xs font-bold text-slate-500 uppercase tracking-wider border border-slate-100">
           {label}
         </span>
       </div>
+
+      {/* Swap Button */}
+      {item && onSwap && (
+        <button
+          onClick={() => onSwap(slotKey)}
+          disabled={isSwapping}
+          className="absolute top-4 right-4 z-10 p-2 bg-white/90 backdrop-blur-md rounded-full text-slate-600 hover:text-indigo-600 hover:bg-white transition-all border border-slate-100 hover:border-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Swap this item"
+        >
+          <RefreshCw className={`w-4 h-4 ${isSwapping ? 'animate-spin' : ''}`} />
+        </button>
+      )}
 
       <div className="absolute inset-0 flex items-center justify-center p-6">
         {item ? (
           <img 
             src={item.clean_image_url} 
             alt={label} 
-            className={`w-full h-full object-contain mix-blend-multiply drop-shadow-lg group-hover:scale-110 transition-transform duration-500 ${isHero ? 'p-4' : ''}`}
+            className={`w-full h-full object-contain mix-blend-multiply drop-shadow-lg group-hover:scale-110 transition-transform duration-500 ${isHero ? 'p-4' : ''} ${isSwapping ? 'opacity-50' : ''}`}
           />
         ) : (
           <div className="flex flex-col items-center justify-center text-slate-300">
