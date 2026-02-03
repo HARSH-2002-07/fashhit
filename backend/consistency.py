@@ -101,69 +101,47 @@ WATER_RESISTANCE = {
     "Fleece": 0.1, "Hoodie": 0.2
 }
 
-def compute_season_consistency(outfit, weather):
-    """
-    Measures how suitable the outfit is for the climate:
-    - Temperature checks
-    - Rain functionality (Waterproofing)
-    """
-    temp = weather.get("temp", 20)
-    if not outfit: return 0.0
+# In consistency.py -> Replace compute_season_consistency
 
-    raining = is_precipitating(weather)
+def compute_season_consistency(outfit, weather):
+    temp = weather.get("temp", 20)
+    raining = "rain" in weather.get("condition", "").lower()
+    
     scores = []
+    
+    # 1. DEFINE THERMAL LIMITS
+    # Items that cause overheating > 15°C (59°F)
+    HOT_BANS = ["puffer", "shearling", "heavy wool", "thermal", "glove", "scarf", "beanie"]
+    
+    # Items that cause freezing < 10°C (50°F)
+    COLD_BANS = ["linen", "shorts", "sandal", "tank", "flip flop", "slide"]
 
     for item in outfit.values():
         meta = item["meta"]
-        sub = meta.get("sub_category", "")
-        cat = meta.get("category", "")
+        sub = meta.get("sub_category", "").lower()
+        mat = meta.get('material', '').lower()
         
-        # --- 1. PRECIPITATION LOGIC (The "Waterproofing" Fix) ---
-        precip_score = 1.0
+        # A. STRICT THERMAL CHECKS
+        if temp > 18.0: 
+            if any(x in sub for x in HOT_BANS): return 0.0  # HARD FAIL (Heatstroke)
         
+        if temp < 10.0:
+            if any(x in sub for x in COLD_BANS): return 0.0 # HARD FAIL (Hypothermia)
+
+        # B. RAIN CHECK (Existing logic, slightly tuned)
         if raining:
-            # Penalty for "Open" footwear (Sandals) - Existing
-            if meta.get("sub_category") == "Shorts":
-                precip_score = 0.3
-            
-            # NEW: Outerwear Functionality Check
-            if cat == "Outerwear":
-                # Default to 0.4 if unknown (risky), look up known types
-                # Using substring matching to catch "Navy Blazer" -> "Blazer"
-                res_score = 0.4 
-                for key, val in WATER_RESISTANCE.items():
-                    if key.lower() in sub.lower():
-                        res_score = val
-                        break
-                precip_score = res_score
-
-        # --- 2. TEMPERATURE LOGIC ---
-        # Hard Safety Stop (No shorts in winter)
-        unsafe_cold_items = ["Shorts", "Sandals", "Flip Flops", "Slides"]
+            if sub in ["sandals", "slides", "flip flops", "suede shoes"]:
+                return 0.2  # Soft Fail
+            if meta.get("category") == "Outerwear":
+                # Check for water resistance keywords
+                if any(x in sub for x in ["rain", "trench", "parka", "shell", "technical"]):
+                    scores.append(1.0)
+                else:
+                    scores.append(0.5) # Regular coat in rain is "meh"
         
-        if any(x in sub for x in unsafe_cold_items) and temp < 20:
-            return 0.0  # Hard Reject
+        scores.append(1.0) # Default pass if no bans triggered
 
-        if temp < 10:
-            temp_score = 1.0 if meta.get("seasonality") in ["Winter", "All-Season"] else 0.4
-        elif temp > 25:
-            temp_score = 1.0 if meta.get("seasonality") in ["Summer", "All-Season"] else 0.5
-        else:
-            temp_score = 1.0
-
-        # Weighted item score
-        if raining:
-            # In rain, functionality matters more than temp
-            scores.append(0.4 * temp_score + 0.6 * precip_score)
-        else:
-            scores.append(temp_score)
-
-    if not scores: return 0.0
-    
-    # Return average score
-    return sum(scores) / len(scores)
-
-    return min(scores) * 0.6 + (sum(scores) / len(scores)) * 0.4
+    return sum(scores) / len(scores) if scores else 0.0
 
 def compute_material_harmony(outfit):
     materials = [i["meta"].get("material") for i in outfit.values()]
@@ -177,18 +155,34 @@ def compute_material_harmony(outfit):
 
     return 1.0
 
-def compute_redundancy(outfit):
-    seen = set()
-    penalty = 0.0
+# In consistency.py -> Replace compute_redundancy
 
+def compute_redundancy(outfit):
+    # Words we NEVER want to repeat in an outfit
+    # e.g. "Denim Jacket" + "Denim Jeans" = Canadian Tuxedo (Risk)
+    # e.g. "Flannel Shirt" + "Flannel Shacket" = Redundant
+    DANGER_PATTERNS = {"flannel", "denim", "leather", "corduroy", "linen", "plaid", "stripe"}
+    
+    found_patterns = []
+    penalty = 0.0
+    
     for item in outfit.values():
-        sub = item["meta"].get("sub_category")
-        if sub in seen:
-            penalty += 0.3
-        seen.add(sub)
+        name = item['meta'].get('sub_category', '').lower()
+        
+        # Check for danger patterns
+        for pattern in DANGER_PATTERNS:
+            if pattern in name:
+                if pattern in found_patterns:
+                    # We found a duplicate! (e.g. Flannel twice)
+                    penalty += 0.4 
+                found_patterns.append(pattern)
+                
+    # Also check for exact duplicate sub-categories (e.g. Hoodie + Hoodie)
+    subs = [i['meta'].get('sub_category') for i in outfit.values()]
+    if len(subs) != len(set(subs)):
+        penalty += 0.2
 
     return max(0.0, 1.0 - penalty)
-
 
 def compute_intent_alignment(outfit, intent):
     allowed = INTENT_FORMALITY_MAP.get(intent.value, set())

@@ -444,10 +444,9 @@ const OutfitRecommendation = () => {
                           left: '50%',
                           transform: 'translateX(-50%)',
                           zIndex: 3,
-                          height: 'auto',
-                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                          height: 'auto'
                         }}
-                        className="object-contain animate-in fade-in zoom-in duration-1000"
+                        className="object-contain animate-in fade-in zoom-in duration-1000 paper-doll-item"
                       />
                     )}
                     
@@ -463,10 +462,9 @@ const OutfitRecommendation = () => {
                           left: '50%',
                           transform: 'translateX(-50%)',
                           zIndex: 2,
-                          height: 'auto',
-                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                          height: 'auto'
                         }}
-                        className="object-contain animate-in fade-in zoom-in duration-700"
+                        className="object-contain animate-in fade-in zoom-in duration-700 paper-doll-item"
                       />
                     )}
                     
@@ -482,10 +480,9 @@ const OutfitRecommendation = () => {
                           left: '50%',
                           transform: 'translateX(-50%)',
                           zIndex: 1,
-                          height: 'auto',
-                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                          height: 'auto'
                         }}
-                        className="object-contain animate-in fade-in zoom-in duration-500"
+                        className="object-contain animate-in fade-in zoom-in duration-500 paper-doll-item"
                       />
                     )}
                     
@@ -501,10 +498,9 @@ const OutfitRecommendation = () => {
                           left: '50%',
                           transform: 'translateX(-50%)',
                           zIndex: 4,
-                          height: 'auto',
-                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                          height: 'auto'
                         }}
-                        className="object-contain animate-in fade-in slide-in-from-bottom-4 duration-700"
+                        className="object-contain animate-in fade-in slide-in-from-bottom-4 duration-700 paper-doll-item"
                       />
                     )}
                     
@@ -520,10 +516,9 @@ const OutfitRecommendation = () => {
                           left: '50%',
                           transform: 'translateX(-50%)',
                           zIndex: 2,
-                          height: 'auto',
-                          filter: 'drop-shadow(0px 10px 15px rgba(0,0,0,0.3))'
+                          height: 'auto'
                         }}
-                        className="object-contain animate-in fade-in zoom-in duration-700"
+                        className="object-contain animate-in fade-in zoom-in duration-700 paper-doll-item"
                       />
                     )}
                     
@@ -538,10 +533,9 @@ const OutfitRecommendation = () => {
                           right: '8%',
                           zIndex: 5,
                           width: '20%',
-                          height: 'auto',
-                          filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.25))'
+                          height: 'auto'
                         }}
-                        className="object-contain animate-in fade-in slide-in-from-right-4 duration-700"
+                        className="object-contain animate-in fade-in slide-in-from-right-4 duration-700 paper-doll-item-accessory"
                       />
                     )}
                   </div>

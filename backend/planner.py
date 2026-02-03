@@ -122,6 +122,8 @@ def formality_score(outfit: dict) -> float:
     ]
     return 1.0 if len(set(formalities)) == 1 else 0.5
 
+# REPLACE the existing visual_harmony function in planner.py
+
 def visual_harmony(outfit: dict, vectors: dict) -> float:
     vecs = [vectors[item['id']] for item in outfit.values()]
     if len(vecs) <= 1:
@@ -134,7 +136,14 @@ def visual_harmony(outfit: dict, vectors: dict) -> float:
         sim = np.dot(v, centroid) / (np.linalg.norm(v) * np.linalg.norm(centroid))
         sims.append(sim)
 
-    return float(np.clip(np.mean(sims), 0.0, 1.0))
+    raw_avg = float(np.mean(sims))
+    
+    # NEW: Sigmoid Scaling
+    # Maps raw 0.20 -> 0.60
+    # Maps raw 0.30 -> 0.90
+    scaled_score = 1 / (1 + np.exp(-15 * (raw_avg - 0.25)))
+    
+    return float(np.clip(scaled_score, 0.5, 0.99))
 
 
 
@@ -682,104 +691,115 @@ class ProPlannerV7:
         
         self.user_feedback_cache = {}  # Cache feedback to avoid repeated queries
 
+    # In planner.py -> Replace the get_user_feedback method
+
     def get_user_feedback(self, user_id: str) -> Dict[str, any]:
-        """Fetch and analyze user's feedback history for personalized recommendations."""
-        if not user_id:
-            print("⚠️  No user_id provided for feedback lookup")
-            return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
-        
-        if not self.supabase:
-            print("⚠️  Supabase client not available - cannot fetch feedback")
-            return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
-        
-        # Check cache first
+        if not user_id or not self.supabase:
+            return {'disliked_contexts': {}, 'item_pairs': {}}
+
+        # Check cache
         if user_id in self.user_feedback_cache:
-            cached = self.user_feedback_cache[user_id]
-            print(f"💾 Using cached feedback: {len(cached['disliked_items'])} dislikes, {len(cached['liked_items'])} likes")
-            return cached
-        
+            return self.user_feedback_cache[user_id]
+
         try:
-            # Fetch user's feedback from database
-            print(f"🔍 Querying feedback for user: {user_id[:8]}...")
+            # Fetch feedback
             result = self.supabase.table('outfit_feedback').select('*').eq('user_id', user_id).execute()
             
-            print(f"📊 Query returned {len(result.data) if result.data else 0} feedback records")
+            # New Structure: Map dislikes to specific contexts (queries)
+            # Format: { "movie date": [ {id1, id2}, {id3, id4} ] }
+            disliked_contexts = {} 
+            item_pairs = {} 
             
-            if not result.data:
-                return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
-            
-            # Analyze feedback patterns
-            item_pairs = {}  # {(item1_id, item2_id): score}
-            liked_items = set()
-            disliked_items = set()
-            
-            for feedback in result.data:
-                rating = feedback.get('rating')  # 'like' or 'dislike'
-                outfit_items = feedback.get('outfit_items', {})
+            for fb in result.data:
+                rating = fb.get('rating')
+                # We assume your DB saves the user_query as 'context' or 'query'
+                # If not, it falls back to "general"
+                context = fb.get('context', 'general').lower().strip()
+                outfit_items = fb.get('outfit_items', {})
                 
-                # Extract item IDs from outfit
-                item_ids = [str(item.get('id')) for item in outfit_items.values() if item and item.get('id')]
+                # Get Set of Item IDs in this outfit
+                current_ids = {str(i.get('id')) for i in outfit_items.values() if i.get('id')}
                 
-                # Track individual item preferences
-                if rating == 'like':
-                    liked_items.update(item_ids)
-                elif rating == 'dislike':
-                    disliked_items.update(item_ids)
-                
-                # Track item pair preferences (combinations)
-                for i, id1 in enumerate(item_ids):
-                    for id2 in item_ids[i+1:]:
-                        pair = tuple(sorted([id1, id2]))
-                        if pair not in item_pairs:
-                            item_pairs[pair] = 0
-                        
-                        # Positive for likes, negative for dislikes
-                        item_pairs[pair] += 1 if rating == 'like' else -1
-            
+                if rating == 'dislike':
+                    if context not in disliked_contexts:
+                        disliked_contexts[context] = []
+                    # Store the specific COMBINATION that failed
+                    disliked_contexts[context].append(current_ids)
+                    
+                    # Also penalize the specific pairs (e.g. Hoodie + Loafers = Bad)
+                    # This applies globally because bad style is usually bad everywhere
+                    sorted_ids = sorted(list(current_ids))
+                    for i in range(len(sorted_ids)):
+                        for j in range(i + 1, len(sorted_ids)):
+                            pair = (sorted_ids[i], sorted_ids[j])
+                            item_pairs[pair] = item_pairs.get(pair, 0) - 1
+
+                elif rating == 'like':
+                    # Likes can still boost pairs globally
+                    sorted_ids = sorted(list(current_ids))
+                    for i in range(len(sorted_ids)):
+                        for j in range(i + 1, len(sorted_ids)):
+                            pair = (sorted_ids[i], sorted_ids[j])
+                            item_pairs[pair] = item_pairs.get(pair, 0) + 1
+
             feedback_data = {
-                'item_pairs': item_pairs,
-                'liked_items': liked_items,
-                'disliked_items': disliked_items
+                'disliked_contexts': disliked_contexts,
+                'item_pairs': item_pairs
             }
             
-            # Cache the result
             self.user_feedback_cache[user_id] = feedback_data
-            
-            # Debug output
-            print(f"\n🔍 FEEDBACK ANALYSIS for user {user_id[:8]}...")
-            print(f"   📚 Liked items: {len(liked_items)}")
-            print(f"   🚫 Disliked items: {len(disliked_items)}")
-            print(f"   🔗 Item pairs tracked: {len(item_pairs)}")
-            
-            if disliked_items:
-                print(f"   ⚠️  Will avoid: {list(disliked_items)[:5]}...")
-            if liked_items:
-                print(f"   ✨ Will prefer: {list(liked_items)[:5]}...")
-            
             return feedback_data
-            
+
         except Exception as e:
-            print(f"⚠️ Error fetching user feedback: {str(e)}")
-            return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
-    
+            print(f"⚠️ Feedback Error: {e}")
+            return {'disliked_contexts': {}, 'item_pairs': {}}
+    # REPLACE the existing apply_hybrid_ranking method in planner.py
+
     def apply_hybrid_ranking(self, candidates: List[dict], query: str) -> List[dict]:
         q = query.lower()
-        boosters = ["leather", "denim", "linen", "boots", "sneakers", "hoodie", "bomber", "belt", "watch"]
-        active_boosts = [k for k in boosters if k in q]
-        formal_req = "formal" in q or "interview" in q or "wedding" in q
-        casual_req = "casual" in q or "chill" in q
         
+        # 1. DETECT SCENARIO
+        is_run = any(x in q for x in ["run", "jog", "sprint", "marathon", "training"])
+        is_gym = any(x in q for x in ["gym", "workout", "lift", "sport", "active"])
+        is_office = any(x in q for x in ["office", "work", "meeting", "interview", "business", "corporate"])
+        is_date = any(x in q for x in ["date", "dinner", "romantic", "night", "girlfriend", "boyfriend"])
+
         for c in candidates:
             meta = c['item']['meta']
-            desc = f"{meta.get('sub_category','')} {meta.get('material','')} {meta.get('category','')}".lower()
-            formality = meta.get('formality', 'Casual')
+            sub = meta.get('sub_category', '').lower()
             
-            matches = sum(1 for k in active_boosts if k in desc)
-            if matches > 0: c['score'] += (matches * 0.5)
-            
-            if formal_req and formality == "Casual": c['score'] -= 0.5 
-            if casual_req and formality == "Formal": c['score'] -= 0.3
-            
+            # --- SCENARIO 1: RUNNING / GYM ---
+            if is_run or is_gym:
+                # BONUS: Activewear
+                if any(x in sub for x in ["sneaker", "trainer", "running", "short", "tee", "tank", "track", "jogger", "legging"]):
+                    c['score'] += 0.5  # Huge Bonus to force Activewear
+                # PENALTY: Everything else (Sandals, Jeans, Boots)
+                else:
+                    c['score'] -= 0.6  # Hard Kill
+
+            # --- SCENARIO 2: OFFICE ---
+            elif is_office:
+                # Penalty: Unprofessional items
+                if any(x in sub for x in ["sandal", "flip", "short", "graphic", "hoodie", "sweat"]):
+                    c['score'] -= 0.5
+                # Bonus: Professional gear
+                if any(x in sub for x in ["shirt", "trousers", "blazer", "oxford", "loafer", "suit"]):
+                    c['score'] += 0.3
+
+            # --- SCENARIO 3: DATE NIGHT ---
+            elif is_date:
+                # Penalty: Lazy wear (No more Hoodie Date Nights!)
+                if any(x in sub for x in ["jogger", "sweat", "track", "hoodie", "gym"]):
+                    c['score'] -= 0.4
+                # Bonus: Sharp Casual
+                if any(x in sub for x in ["shirt", "polo", "chino", "boot", "loafer", "jacket", "jeans"]):
+                    c['score'] += 0.2
+
+            # Keyword Boost (Standard)
+            # If user explicitly asks for "Sandals", allow it even if rules say no
+            if any(k in sub for k in q.split()):
+                c['score'] += 0.2
+
         return sorted(candidates, key=lambda x: x['score'], reverse=True)
 
     def plan(self, user_query: str, manual_weather: str = None, user_id: str = None) -> dict:
@@ -787,8 +807,9 @@ class ProPlannerV7:
         # Get user's feedback history for personalization
         user_feedback = self.get_user_feedback(user_id) if user_id else None
         
-        if user_feedback and (user_feedback['disliked_items'] or user_feedback['liked_items']):
-            print(f"\n🎯 FEEDBACK ACTIVE: {len(user_feedback['disliked_items'])} dislikes, {len(user_feedback['liked_items'])} likes")
+        # CORRECTED: Check for contexts and pairs instead of raw items
+        if user_feedback and (user_feedback.get('disliked_contexts') or user_feedback.get('item_pairs')):
+            print(f"\n🎯 FEEDBACK ACTIVE: {len(user_feedback.get('disliked_contexts', {}))} contexts tracked")
         else:
             print(f"\n🎯 No user feedback found (user_id: {user_id})")
         
@@ -879,17 +900,58 @@ class ProPlannerV7:
                     c_vec = self.store.vectors[curr['id']]
                     curr_id = str(curr.get('id', curr['meta'].get('id', '')))
                     
+                    # 1# --- NEW FEEDBACK LOGIC (Context Aware) ---
+                    feedback_modifier = 0.0
+                    
+                    if user_feedback:
+                        curr_id = str(c["item"]["meta"].get("id", ""))
+                        
+                        # 1. CHECK CONTEXTUAL OUTFIT BLOCK
+                        # Construct the potential outfit IDs
+                        current_outfit_ids = {str(i['meta'].get('id')) for i in items}
+                        current_outfit_ids.add(curr_id)
+                        
+                        # Check if this specific combo was disliked for THIS specific query
+                        q_low = user_query.lower()
+                        
+                        # Safe get for disliked_contexts
+                        disliked_ctx = user_feedback.get('disliked_contexts', {})
+                        
+                        should_skip = False
+                        for ctx, banned_combos in disliked_ctx.items():
+                            # Fuzzy match: if "Movie Date" in query "Date for Movie"
+                            if ctx in q_low or q_low in ctx:
+                                if current_outfit_ids in banned_combos:
+                                    print(f"🚫 BLOCKING Outfit: User disliked this combo for '{ctx}'")
+                                    should_skip = True
+                                    break
+                        
+                        if should_skip: continue # Skip this item
+                        
+                        # 2. CHECK PAIRS (Style check)
+                        # Safe get for item_pairs
+                        known_pairs = user_feedback.get('item_pairs', {})
+                        
+                        for prev_item in items:
+                            prev_id = str(prev_item["meta"].get("id", ""))
+                            pair = tuple(sorted([prev_id, curr_id]))
+                            
+                            if pair in known_pairs:
+                                pair_score = known_pairs[pair]
+                                if pair_score < 0:
+                                    feedback_modifier -= 0.5 # Bad pair
+                                elif pair_score > 0:
+                                    feedback_modifier += 0.3 # Good pair
+
+                    # DEBUG: Print first few items to see ID structure
                     # DEBUG: Print first few items to see ID structure
                     if slot_name == valid_slot_names[1] and score == beam[0][0]:
-                        print(f"🔍 DEBUG Item ID check: curr['id']={curr.get('id', 'N/A')}, curr['meta']['id']={curr['meta'].get('id', 'N/A')}")
-                        if user_feedback:
-                            print(f"🔍 DEBUG: Is {curr_id} in disliked_items? {curr_id in user_feedback['disliked_items']}")
-                            print(f"🔍 DEBUG: Sample disliked IDs: {list(user_feedback['disliked_items'])[:3]}")
+                        print(f"🔍 DEBUG Item ID check: curr['id']={curr.get('id', 'N/A')}")
 
                     # STRONG FILTER: Skip heavily disliked items early
-                    if user_feedback and curr_id in user_feedback['disliked_items']:
-                        print(f"🚫 SKIPPING disliked item: {curr['meta'].get('sub_category', 'Unknown')} (ID: {curr_id})")
-                        continue
+                    # if user_feedback and curr_id in user_feedback['disliked_items']:
+                    #     print(f"🚫 SKIPPING disliked item: {curr['meta'].get('sub_category', 'Unknown')} (ID: {curr_id})")
+                    #     continue
 
                     if not WeatherEngine.is_safe(curr, weather["condition"]):
                         continue
@@ -904,6 +966,7 @@ class ProPlannerV7:
                         compatibility -= 0.2
 
                     # Weighted Score
+                    # Weighted Score
                     slot_weight = SLOT_WEIGHTS.get(slot_name, 1.0)
 
                     tentative_outfit = {
@@ -913,40 +976,15 @@ class ProPlannerV7:
                         )
                     }
                     
-                    # Apply user feedback learning (reinforcement)
-                    feedback_modifier = 0.0
-                    if user_feedback:
-                        curr_id = str(c["item"]["meta"].get("id", ""))
-                        
-                        # Penalty for disliked items
-                        if curr_id in user_feedback['disliked_items']:
-                            feedback_modifier -= 0.3
-                            print(f"⚠️ Applying penalty for disliked item: {curr_id}")
-                        
-                        # Bonus for liked items
-                        if curr_id in user_feedback['liked_items']:
-                            feedback_modifier += 0.2
-                            print(f"✨ Applying bonus for liked item: {curr_id}")
-                        
-                        # Check item pair preferences
-                        for prev_item in items:
-                            prev_id = str(prev_item["meta"].get("id", ""))
-                            pair = tuple(sorted([prev_id, curr_id]))
-                            
-                            if pair in user_feedback['item_pairs']:
-                                pair_score = user_feedback['item_pairs'][pair]
-                                if pair_score < 0:
-                                    feedback_modifier -= 0.4  # Strong penalty for disliked pairs
-                                    print(f"❌ Penalizing disliked pair: {pair}")
-                                elif pair_score > 0:
-                                    feedback_modifier += 0.3  # Bonus for liked pairs
-                                    print(f"💚 Boosting liked pair: {pair}")
+                    # NOTE: We already calculated 'feedback_modifier' at the top of the loop.
+                    # We do NOT need to calculate it again here using the old logic.
 
                     ocs = compute_outfit_consistency(
                         tentative_outfit,
                         intent=template["intent"],
                         weather=weather
                     )
+
                     if "rain" in weather["condition"].lower():
                         if ocs["score"] < 0.75:
                             continue
