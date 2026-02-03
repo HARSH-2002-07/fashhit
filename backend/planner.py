@@ -13,6 +13,11 @@ from intent_color_mood import color_mood_bias
 import math
 from statistics import mean
 from consistency import compute_outfit_consistency
+from supabase import create_client
+from dotenv import load_dotenv
+import random
+
+load_dotenv()
 
 DEBUG_REASONING = True
 
@@ -652,7 +657,7 @@ def compute_confidence(outfit: dict, template_name: str, weather: dict, vectors:
 
 # --- 5. MASTER PLANNER V7 ---
 class ProPlannerV7:
-    def __init__(self, store: WardrobeStore):
+    def __init__(self, store: WardrobeStore, supabase_client=None):
         self.store = store
         print("🧠 Loading Planner V7 (Shopping & Accessories Enabled)...")
         self.fclip = FashionCLIP('fashion-clip')
@@ -660,7 +665,103 @@ class ProPlannerV7:
         
         # Init Shopping Brain
         self.shopper = ShoppingEngine(self.fclip, store.data_dir)
+        
+        # Use provided Supabase client or try to create one
+        if supabase_client:
+            self.supabase = supabase_client
+            print("✅ Supabase client connected for feedback learning")
+        else:
+            # Fallback: try to create from environment
+            supabase_url = os.getenv('SUPABASE_URL')
+            supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
+            self.supabase = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
+            if self.supabase:
+                print("✅ Supabase client created from environment")
+            else:
+                print("⚠️  No Supabase client - feedback learning disabled")
+        
+        self.user_feedback_cache = {}  # Cache feedback to avoid repeated queries
 
+    def get_user_feedback(self, user_id: str) -> Dict[str, any]:
+        """Fetch and analyze user's feedback history for personalized recommendations."""
+        if not user_id:
+            print("⚠️  No user_id provided for feedback lookup")
+            return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
+        
+        if not self.supabase:
+            print("⚠️  Supabase client not available - cannot fetch feedback")
+            return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
+        
+        # Check cache first
+        if user_id in self.user_feedback_cache:
+            cached = self.user_feedback_cache[user_id]
+            print(f"💾 Using cached feedback: {len(cached['disliked_items'])} dislikes, {len(cached['liked_items'])} likes")
+            return cached
+        
+        try:
+            # Fetch user's feedback from database
+            print(f"🔍 Querying feedback for user: {user_id[:8]}...")
+            result = self.supabase.table('outfit_feedback').select('*').eq('user_id', user_id).execute()
+            
+            print(f"📊 Query returned {len(result.data) if result.data else 0} feedback records")
+            
+            if not result.data:
+                return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
+            
+            # Analyze feedback patterns
+            item_pairs = {}  # {(item1_id, item2_id): score}
+            liked_items = set()
+            disliked_items = set()
+            
+            for feedback in result.data:
+                rating = feedback.get('rating')  # 'like' or 'dislike'
+                outfit_items = feedback.get('outfit_items', {})
+                
+                # Extract item IDs from outfit
+                item_ids = [str(item.get('id')) for item in outfit_items.values() if item and item.get('id')]
+                
+                # Track individual item preferences
+                if rating == 'like':
+                    liked_items.update(item_ids)
+                elif rating == 'dislike':
+                    disliked_items.update(item_ids)
+                
+                # Track item pair preferences (combinations)
+                for i, id1 in enumerate(item_ids):
+                    for id2 in item_ids[i+1:]:
+                        pair = tuple(sorted([id1, id2]))
+                        if pair not in item_pairs:
+                            item_pairs[pair] = 0
+                        
+                        # Positive for likes, negative for dislikes
+                        item_pairs[pair] += 1 if rating == 'like' else -1
+            
+            feedback_data = {
+                'item_pairs': item_pairs,
+                'liked_items': liked_items,
+                'disliked_items': disliked_items
+            }
+            
+            # Cache the result
+            self.user_feedback_cache[user_id] = feedback_data
+            
+            # Debug output
+            print(f"\n🔍 FEEDBACK ANALYSIS for user {user_id[:8]}...")
+            print(f"   📚 Liked items: {len(liked_items)}")
+            print(f"   🚫 Disliked items: {len(disliked_items)}")
+            print(f"   🔗 Item pairs tracked: {len(item_pairs)}")
+            
+            if disliked_items:
+                print(f"   ⚠️  Will avoid: {list(disliked_items)[:5]}...")
+            if liked_items:
+                print(f"   ✨ Will prefer: {list(liked_items)[:5]}...")
+            
+            return feedback_data
+            
+        except Exception as e:
+            print(f"⚠️ Error fetching user feedback: {str(e)}")
+            return {'item_pairs': {}, 'liked_items': set(), 'disliked_items': set()}
+    
     def apply_hybrid_ranking(self, candidates: List[dict], query: str) -> List[dict]:
         q = query.lower()
         boosters = ["leather", "denim", "linen", "boots", "sneakers", "hoodie", "bomber", "belt", "watch"]
@@ -681,7 +782,15 @@ class ProPlannerV7:
             
         return sorted(candidates, key=lambda x: x['score'], reverse=True)
 
-    def plan(self, user_query: str, manual_weather: str = None) -> dict:
+    def plan(self, user_query: str, manual_weather: str = None, user_id: str = None) -> dict:
+        
+        # Get user's feedback history for personalization
+        user_feedback = self.get_user_feedback(user_id) if user_id else None
+        
+        if user_feedback and (user_feedback['disliked_items'] or user_feedback['liked_items']):
+            print(f"\n🎯 FEEDBACK ACTIVE: {len(user_feedback['disliked_items'])} dislikes, {len(user_feedback['liked_items'])} likes")
+        else:
+            print(f"\n🎯 No user feedback found (user_id: {user_id})")
         
         weather = LiveWeather.get_weather()
         if manual_weather: weather['condition'] = manual_weather 
@@ -732,7 +841,8 @@ class ProPlannerV7:
             for r in raw:
                 fb = formality_bias(r["item"], intent)
                 cb = color_mood_bias(r["item"], intent)
-                r["score"] *= (fb * cb)
+                jitter = random.uniform(0.85, 1.15) 
+                r["score"] *= (fb * cb * jitter)
                 ranked.append(r)
 
             ranked.sort(key=lambda x: x["score"], reverse=True)
@@ -767,6 +877,19 @@ class ProPlannerV7:
                 for c in candidates_map[slot_name]:
                     curr = c['item']
                     c_vec = self.store.vectors[curr['id']]
+                    curr_id = str(curr.get('id', curr['meta'].get('id', '')))
+                    
+                    # DEBUG: Print first few items to see ID structure
+                    if slot_name == valid_slot_names[1] and score == beam[0][0]:
+                        print(f"🔍 DEBUG Item ID check: curr['id']={curr.get('id', 'N/A')}, curr['meta']['id']={curr['meta'].get('id', 'N/A')}")
+                        if user_feedback:
+                            print(f"🔍 DEBUG: Is {curr_id} in disliked_items? {curr_id in user_feedback['disliked_items']}")
+                            print(f"🔍 DEBUG: Sample disliked IDs: {list(user_feedback['disliked_items'])[:3]}")
+
+                    # STRONG FILTER: Skip heavily disliked items early
+                    if user_feedback and curr_id in user_feedback['disliked_items']:
+                        print(f"🚫 SKIPPING disliked item: {curr['meta'].get('sub_category', 'Unknown')} (ID: {curr_id})")
+                        continue
 
                     if not WeatherEngine.is_safe(curr, weather["condition"]):
                         continue
@@ -789,6 +912,35 @@ class ProPlannerV7:
                             items + [curr]
                         )
                     }
+                    
+                    # Apply user feedback learning (reinforcement)
+                    feedback_modifier = 0.0
+                    if user_feedback:
+                        curr_id = str(c["item"]["meta"].get("id", ""))
+                        
+                        # Penalty for disliked items
+                        if curr_id in user_feedback['disliked_items']:
+                            feedback_modifier -= 0.3
+                            print(f"⚠️ Applying penalty for disliked item: {curr_id}")
+                        
+                        # Bonus for liked items
+                        if curr_id in user_feedback['liked_items']:
+                            feedback_modifier += 0.2
+                            print(f"✨ Applying bonus for liked item: {curr_id}")
+                        
+                        # Check item pair preferences
+                        for prev_item in items:
+                            prev_id = str(prev_item["meta"].get("id", ""))
+                            pair = tuple(sorted([prev_id, curr_id]))
+                            
+                            if pair in user_feedback['item_pairs']:
+                                pair_score = user_feedback['item_pairs'][pair]
+                                if pair_score < 0:
+                                    feedback_modifier -= 0.4  # Strong penalty for disliked pairs
+                                    print(f"❌ Penalizing disliked pair: {pair}")
+                                elif pair_score > 0:
+                                    feedback_modifier += 0.3  # Bonus for liked pairs
+                                    print(f"💚 Boosting liked pair: {pair}")
 
                     ocs = compute_outfit_consistency(
                         tentative_outfit,
@@ -807,7 +959,7 @@ class ProPlannerV7:
                         + compatibility * 0.25
                     )
 
-                    new_score = base_score * (0.6 + 0.4 * ocs_score)
+                    new_score = base_score * (0.6 + 0.4 * ocs_score) + feedback_modifier
 
 
                                        
@@ -835,9 +987,8 @@ class ProPlannerV7:
             # x
 
             final_score = final_score = (
-    score * 0.6
-    + confidence * 0.25
-    + ocs_score * 0.15
+    score * 0.7
+    + confidence * 0.3
 )
 
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Home, User, RefreshCw, Sparkles, Loader2, Heart, LogOut, 
-  CloudRain, ShoppingBag, ArrowRight, Shirt, Zap, MapPin, ThumbsUp, ThumbsDown 
+  CloudRain, ShoppingBag, ArrowRight, Shirt, Zap, MapPin, ThumbsUp, ThumbsDown, History 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -300,6 +300,18 @@ const OutfitRecommendation = () => {
 
         {/* User Footer */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          {/* Feedback History Link */}
+          <button 
+            onClick={() => navigate('/feedback-history')}
+            className="w-full mb-3 flex items-center justify-between p-3 bg-white hover:bg-slate-50 rounded-lg transition-colors group border border-slate-200"
+          >
+            <div className="flex items-center gap-3">
+              <History className="w-5 h-5 text-slate-600" />
+              <span className="text-sm font-medium text-slate-700">Feedback History</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-1 transition-all" />
+          </button>
+          
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold border border-indigo-200">

@@ -673,12 +673,13 @@ def recommend_outfit():
                     print("⚠️ No embeddings found in wardrobe items. ProPlanner requires embeddings.")
                     raise Exception("Embeddings not available - using fallback method")
                 
-                # Initialize store and ProPlannerV7
+                # Initialize store and ProPlannerV7 with Supabase client for feedback learning
+                print(f"🔍 DEBUG: Supabase client available: {supabase is not None}")
                 store = WardrobeStore(data_dir=temp_dir)
-                planner = ProPlannerV7(store=store)
+                planner = ProPlannerV7(store=store, supabase_client=supabase)
                 
-                # Generate outfit using neuro-symbolic reasoning with shopping
-                planner_result = planner.plan(user_query=user_query, manual_weather=manual_weather)
+                # Generate outfit using neuro-symbolic reasoning with shopping and user feedback
+                planner_result = planner.plan(user_query=user_query, manual_weather=manual_weather, user_id=user_id)
                 
                 # Clean up temporary directory
                 shutil.rmtree(temp_dir, ignore_errors=True)
@@ -968,7 +969,18 @@ def save_feedback():
         
         result = supabase.table('outfit_feedback').insert(feedback_data).execute()
         
-        print(f"📊 Feedback saved: {rating} for user {user_id}")
+        # Extract item info for logging
+        item_names = [f"{item.get('meta', {}).get('sub_category', 'Unknown')} (ID: {item.get('id', 'N/A')})" 
+                     for item in outfit_items.values() if item]
+        
+        print(f"\n📊 FEEDBACK SAVED:")
+        print(f"   User: {user_id[:8]}...")
+        print(f"   Rating: {rating.upper()}")
+        print(f"   Scenario: {scenario}")
+        print(f"   Items in outfit:")
+        for name in item_names:
+            print(f"      - {name}")
+        print(f"   Outfit ID: {outfit_id}\n")
         
         return jsonify({
             'success': True,
@@ -979,6 +991,64 @@ def save_feedback():
         print(f"❌ Error saving feedback: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/feedback/<user_id>', methods=['GET'])
+def get_user_feedback(user_id):
+    """Get all feedback for a specific user."""
+    try:
+        result = supabase.table('outfit_feedback').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+        
+        return jsonify({
+            'success': True,
+            'data': result.data
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching feedback: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/feedback/<feedback_id>', methods=['DELETE'])
+def delete_feedback(feedback_id):
+    """Delete a specific feedback entry."""
+    try:
+        result = supabase.table('outfit_feedback').delete().eq('id', feedback_id).execute()
+        
+        print(f"🗑️ Deleted feedback: {feedback_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Feedback deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error deleting feedback: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/feedback/clear/<user_id>', methods=['DELETE'])
+def clear_all_feedback(user_id):
+    """Clear all feedback for a specific user."""
+    try:
+        result = supabase.table('outfit_feedback').delete().eq('user_id', user_id).execute()
+        
+        print(f"🗑️ Cleared all feedback for user: {user_id[:8]}...")
+        
+        return jsonify({
+            'success': True,
+            'message': 'All feedback cleared successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error clearing feedback: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
